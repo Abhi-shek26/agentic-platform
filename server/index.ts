@@ -5,6 +5,9 @@ import { config } from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import { createServer } from "http";
+import apiRoutes from "./routes";
+import { errorHandler } from "./utils/errors";
+import "./utils/passport";
 
 // Load environment variables
 config();
@@ -74,18 +77,8 @@ app.get("/health", (req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// API routes (to be implemented)
-app.use("/api/auth", (req: Request, res: Response) => {
-  res.status(501).json({ error: "Authentication routes not yet implemented" });
-});
-
-app.use("/api/projects", (req: Request, res: Response) => {
-  res.status(501).json({ error: "Project routes not yet implemented" });
-});
-
-app.use("/api/generation", (req: Request, res: Response) => {
-  res.status(501).json({ error: "Generation routes not yet implemented" });
-});
+// API routes
+app.use("/api", apiRoutes);
 
 // ============================================================
 // STATIC FILES & SPA FALLBACK
@@ -99,24 +92,59 @@ if (process.env.NODE_ENV === "production") {
   app.get("*", (req: Request, res: Response) => {
     res.sendFile(resolve(__dirname, "../dist/public/index.html"));
   });
-}
-
-// ============================================================
-// ERROR HANDLING
-// ============================================================
-
-interface CustomError extends Error {
-  status?: number;
-}
-
-app.use(
-  (err: CustomError, req: Request, res: Response, next: NextFunction) => {
-    console.error("Error:", err);
-    res.status(err.status || 500).json({
-      error: err.message || "Internal server error",
+} else {
+  // Development: show available endpoints
+  app.get("/", (req: Request, res: Response) => {
+    res.json({
+      message: "Agentic Tournament Generator Platform API",
+      version: "0.1.0",
+      endpoints: {
+        auth: {
+          signup: "POST /api/auth/signup",
+          login: "POST /api/auth/login",
+          logout: "POST /api/auth/logout",
+          me: "GET /api/auth/me",
+        },
+        projects: {
+          list: "GET /api/projects",
+          create: "POST /api/projects",
+          get: "GET /api/projects/:id",
+          update: "PUT /api/projects/:id",
+          delete: "DELETE /api/projects/:id",
+        },
+        generation: {
+          start: "POST /api/projects/:id/generate",
+          status: "GET /api/projects/:id/generation-status",
+          logs: "GET /api/projects/:id/generation-logs",
+        },
+        deployment: {
+          platform: "POST /api/projects/:id/deploy-platform",
+          github: "POST /api/projects/:id/push-github",
+          status: "GET /api/projects/:id/deployment",
+        },
+      },
+      docs: "http://localhost:5000/swagger",
     });
-  }
-);
+  });
+}
+
+// ============================================================
+// 404 HANDLER
+// ============================================================
+
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    error: "Not found",
+    path: req.path,
+    method: req.method,
+  });
+});
+
+// ============================================================
+// ERROR HANDLING (Must be last)
+// ============================================================
+
+app.use(errorHandler);
 
 // ============================================================
 // START SERVER
@@ -131,8 +159,11 @@ server.listen(PORT, "0.0.0.0", () => {
 ╚════════════════════════════════════════════╝
 
 🚀 Server running at http://localhost:${PORT}
-📝 API Documentation: http://localhost:${PORT}/api/docs
+📝 API Documentation: http://localhost:${PORT}/
 ⚡ Environment: ${process.env.NODE_ENV || "development"}
+🔐 Session Secret: ${process.env.SESSION_SECRET ? "✓" : "⚠ NOT SET"}
+🤖 Claude API: ${process.env.ANTHROPIC_API_KEY ? "✓ Configured" : "⚠ NOT SET"}
+🗄️  Database: ${process.env.DATABASE_URL ? "✓ Configured" : "⚠ NOT SET"}
 
 Ready to accept requests...
   `);
