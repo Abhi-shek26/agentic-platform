@@ -53,7 +53,7 @@ CREATE USER agentic WITH PASSWORD 'agentic123';
 ALTER ROLE agentic SET client_encoding TO 'utf8';
 ALTER ROLE agentic SET default_transaction_isolation TO 'read committed';
 ALTER ROLE agentic SET default_transaction_deferrable TO on;
-ALTER ROLE agentic SET default_time_zone TO 'UTC';
+ALTER ROLE agentic SET timezone TO 'UTC';;
 GRANT ALL PRIVILEGES ON DATABASE agentic_platform_dev TO agentic;
 \q
 ```

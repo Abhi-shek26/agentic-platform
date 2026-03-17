@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { storage } from "../storage";
+import { storage } from "./storage";
 import {
   hashPassword,
   verifyPassword,
@@ -8,7 +8,7 @@ import {
   validatePassword as validatePasswordStrength,
   ValidationError,
   AuthenticationError,
-} from "../utils/auth";
+} from "./utils/auth";
 
 const router = Router();
 
