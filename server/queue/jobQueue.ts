@@ -1,11 +1,13 @@
 import Bull from "bull";
 import { orchestratorAgent } from "../ai/orchestrator";
 import { GenerationProgressTracker } from "../utils/progressEmitter";
+import { ProjectAssembler } from "../utils/projectAssembler";
+import { storage } from "../storage";
 
 /**
  * Generation Job Queue
  * Uses Bull with Redis to process long-running AI code generation
- * Handles job persistence, retries, and progress tracking
+ * Handles job persistence, retries, progress tracking, and code assembly
  */
 
 export const generateQueue = new Bull("generation", {
@@ -29,7 +31,8 @@ export const generateQueue = new Bull("generation", {
  * Process generation jobs
  */
 generateQueue.process(async (job) => {
-  const { projectId, specification } = job.data;
+  const { projectId, projectName, specification } = job.data;
+  let currentProgress = 0;
 
   console.log(`[Job ${job.id}] Starting generation for project: ${projectId}`);
 
@@ -45,13 +48,14 @@ generateQueue.process(async (job) => {
 
   try {
     // Update job progress
-    job.progress(10);
+    currentProgress = 10;
+    job.progress(currentProgress);
 
     // Call orchestrator with progress callback
     const result = await orchestratorAgent(specification, (progress) => {
       // Update Bull job progress
-      const percent = Math.min(progress.percentage || 0, 95);
-      job.progress(percent);
+      currentProgress = Math.min(progress.percentage || 0, 95);
+      job.progress(currentProgress);
 
       // Emit to frontend via EventEmitter
       GenerationProgressTracker.emitProgress(projectId, {
@@ -60,6 +64,29 @@ generateQueue.process(async (job) => {
       });
     });
 
+    if (!result.success) {
+      throw new Error(`Code generation failed: ${result.errors?.join(", ")}`);
+    }
+
+    // ASSEMBLY PHASE: Assemble generated code into project files (95% -> 99%)
+    console.log(`[Job ${job.id}] Starting project assembly...`);
+    GenerationProgressTracker.emitProgress(projectId, {
+      jobId: job.id,
+      percentage: 96,
+      currentAgent: "Assembly",
+      message: "Assembling generated code into project structure...",
+    });
+
+    const assemblyResult = await ProjectAssembler.assembleProject(
+      projectId,
+      projectName,
+      result.data
+    );
+
+    if (!assemblyResult.success) {
+      throw new Error(`Project assembly failed: ${assemblyResult.errors.join(", ")}`);
+    }
+
     // Update final progress
     job.progress(100);
     GenerationProgressTracker.emitProgress(projectId, {
@@ -67,11 +94,29 @@ generateQueue.process(async (job) => {
       status: "completed",
       progress: 100,
       currentAgent: "Complete",
-      message: "Code generation finished successfully!",
+      message: "Code generation and assembly finished successfully!",
+      projectPath: assemblyResult.projectPath,
+      stats: assemblyResult.stats,
     });
 
-    console.log(`[Job ${job.id}] Generation completed`);
-    return result;
+    // Update project in database
+    await storage.updateProject(projectId, {
+      status: "generated",
+      generatedCodePath: assemblyResult.projectPath,
+      generationMetadata: {
+        jobId: job.id,
+        completedAt: new Date().toISOString(),
+        stats: assemblyResult.stats,
+        warnings: assemblyResult.warnings,
+      },
+    });
+
+    console.log(`[Job ${job.id}] Generation and assembly completed successfully`);
+    return {
+      success: true,
+      projectPath: assemblyResult.projectPath,
+      stats: assemblyResult.stats,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`[Job ${job.id}] Generation failed:`, errorMessage);
@@ -79,9 +124,19 @@ generateQueue.process(async (job) => {
     GenerationProgressTracker.emitProgress(projectId, {
       jobId: job.id,
       status: "failed",
-      progress: job.progress(),
+      progress: currentProgress,
       message: `Generation failed: ${errorMessage}`,
       error: errorMessage,
+    });
+
+    // Update project status to failed
+    await storage.updateProject(projectId, {
+      status: "failed",
+      generationMetadata: {
+        jobId: job.id,
+        failedAt: new Date().toISOString(),
+        error: errorMessage,
+      },
     });
 
     throw error;
@@ -108,6 +163,7 @@ generateQueue.on("active", (job) => {
  */
 export async function queueGenerationJob(
   projectId: string,
+  projectName: string,
   specification: any
 ): Promise<Bull.Job<any>> {
   console.log(`📋 Queuing generation job for project: ${projectId}`);
@@ -115,6 +171,7 @@ export async function queueGenerationJob(
   const job = await generateQueue.add(
     {
       projectId,
+      projectName,
       specification,
     },
     {
@@ -138,7 +195,7 @@ export async function getJobStatus(jobId: string): Promise<any> {
   }
 
   const state = await job.getState();
-  const progress = job._progress;
+  const progress = (job as any).progress || 0;
   const data = job.data;
 
   return {

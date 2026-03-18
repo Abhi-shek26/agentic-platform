@@ -380,7 +380,7 @@ router.post(
       });
 
       // Queue job in Bull queue for processing by orchestrator
-      await queueGenerationJob(projectId, project.specification);
+      await queueGenerationJob(projectId, project.name, project.specification);
 
       res.status(202).json({
         jobId: job.id,
