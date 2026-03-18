@@ -6,11 +6,11 @@ import {
   validateEmail,
   validateUsername,
   validatePassword as validatePasswordStrength,
-  ValidationError,
-  AuthenticationError,
 } from "./utils/auth";
 import { queueGenerationJob, getJobStatus } from "./queue/jobQueue";
 import { GenerationProgressTracker } from "./utils/progressEmitter";
+import { CodeDownloader } from "./utils/codeDownloader";
+import { CodePreview } from "./utils/codePreview";
 
 const router = Router();
 
@@ -446,6 +446,177 @@ router.get(
     } catch (error) {
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to get logs",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/projects/:id/code
+ * Download generated project code as ZIP
+ */
+router.get(
+  "/projects/:id/code",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      const projectId = req.params.id;
+
+      // Get project
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // Verify user owns project
+      if (project.organizationId !== user.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Check if project has been generated
+      if (project.status !== "generated" && project.status !== "deployed") {
+        return res.status(400).json({
+          error: "Project has not been generated yet",
+          status: project.status,
+        });
+      }
+
+      // Get generated project path
+      const generatedCodePath = (project as any).generatedCodePath;
+      if (!generatedCodePath) {
+        return res.status(404).json({ error: "Generated code not found" });
+      }
+
+      console.log(`📥 Starting download for project: ${projectId}`);
+      console.log(`   Project path: ${generatedCodePath}`);
+
+      // Create archive
+      const archiveResult = await CodeDownloader.createProjectArchive(
+        generatedCodePath,
+        projectId,
+        project.name
+      );
+
+      if (!archiveResult.success || !archiveResult.filePath) {
+        return res.status(500).json({
+          error: archiveResult.error || "Failed to create archive",
+        });
+      }
+
+      console.log(`✓ Archive ready: ${archiveResult.filePath}`);
+
+      // Send file as download
+      await CodeDownloader.sendFileDownload(archiveResult.filePath, project.name, res);
+    } catch (error) {
+      console.error("Download error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: error instanceof Error ? error.message : "Failed to download",
+        });
+      }
+    }
+  }
+);
+
+/**
+ * GET /api/projects/:id/code-info
+ * Get information about generated code (files, structure, stats)
+ */
+router.get(
+  "/projects/:id/code-info",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      const projectId = req.params.id;
+
+      // Get project
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // Verify user owns project
+      if (project.organizationId !== user.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Check if project has been generated
+      if (project.status !== "generated" && project.status !== "deployed") {
+        return res.status(400).json({
+          error: "Project has not been generated yet",
+        });
+      }
+
+      const generatedCodePath = (project as any).generatedCodePath;
+      if (!generatedCodePath) {
+        return res.status(404).json({ error: "Generated code not found" });
+      }
+
+      // Get code info
+      const codeInfo = CodePreview.getCodeInfo(generatedCodePath, project.name, projectId);
+      const codeStats = CodePreview.getCodeStats(generatedCodePath);
+
+      res.json({
+        ...codeInfo,
+        stats: codeStats,
+      });
+    } catch (error) {
+      console.error("Code info error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get code info",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/projects/:id/code-preview
+ * Get preview of a specific file from generated code
+ */
+router.get(
+  "/projects/:id/code-preview",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      const projectId = req.params.id;
+      const filePath = req.query.file as string;
+
+      if (!filePath) {
+        return res.status(400).json({ error: "File path required" });
+      }
+
+      // Get project
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      // Verify user owns project
+      if (project.organizationId !== user.id) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const generatedCodePath = (project as any).generatedCodePath;
+      if (!generatedCodePath) {
+        return res.status(404).json({ error: "Generated code not found" });
+      }
+
+      // Get file preview
+      const preview = CodePreview.getFilePreview(generatedCodePath, filePath);
+
+      res.json({
+        fileName: filePath,
+        content: preview.content,
+        totalLines: preview.totalLines,
+        truncated: preview.truncated,
+      });
+    } catch (error) {
+      console.error("Code preview error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get preview",
       });
     }
   }
