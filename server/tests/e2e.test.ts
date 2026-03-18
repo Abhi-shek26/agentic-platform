@@ -30,6 +30,7 @@ class E2ETestRunner {
   private authToken?: string;
   private userId?: string;
   private projectId?: string;
+  private testSuffix: string;
 
   constructor(baseURL: string = 'http://localhost:5000') {
     this.baseURL = baseURL;
@@ -37,6 +38,8 @@ class E2ETestRunner {
       baseURL,
       validateStatus: () => true, // Don't throw on any status
     });
+    // Generate unique suffix for test credentials (max 5 chars to keep username under 20 chars)
+    this.testSuffix = Math.random().toString(36).substring(2, 7);
   }
 
   /**
@@ -109,8 +112,8 @@ class E2ETestRunner {
     // Test 1.1: Signup
     const signupResult = await this.runTest('User Signup', async () => {
       const response = await this.api.post('/api/auth/signup', {
-        email: `test-${Date.now()}@example.com`,
-        username: `testuser${Date.now()}`,
+        email: `test${this.testSuffix}@example.com`,
+        username: `user${this.testSuffix}`,
         password: 'TestPassword123!',
         displayName: 'Test User',
       });
@@ -125,6 +128,11 @@ class E2ETestRunner {
 
       this.userId = response.data.user.id;
       this.authToken = response.data.token;
+
+      // Debug: log if token is missing
+      if (!this.authToken) {
+        console.log('    ⚠️  Token not in response:', JSON.stringify(response.data));
+      }
 
       return { success: true, details: `User ID: ${this.userId}` };
     });

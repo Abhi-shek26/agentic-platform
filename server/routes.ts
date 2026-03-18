@@ -6,6 +6,7 @@ import {
   validateEmail,
   validateUsername,
   validatePassword as validatePasswordStrength,
+  generateAuthToken,
 } from "./utils/auth";
 import { queueGenerationJob, getJobStatus } from "./queue/jobQueue";
 import { GenerationProgressTracker } from "./utils/progressEmitter";
@@ -13,6 +14,9 @@ import { CodeDownloader } from "./utils/codeDownloader";
 import { CodePreview } from "./utils/codePreview";
 
 const router = Router();
+
+// Token to user mapping for API authentication (development)
+const tokenToUser = new Map<string, any>();
 
 // ============================================================
 // MIDDLEWARE
@@ -22,10 +26,26 @@ const router = Router();
  * Middleware to check if user is authenticated
  */
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.user) {
-    return res.status(401).json({ error: "Unauthorized" });
+  // Check session first (for browser-based requests)
+  if (req.user) {
+    return next();
   }
-  next();
+
+  // Check Bearer token (for API requests)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    const user = tokenToUser.get(token);
+    if (user) {
+      req.user = user;
+      return next();
+    } else {
+      console.warn(`Token not found in mapping: ${token.substring(0, 10)}...`);
+      console.warn(`Available tokens: ${Array.from(tokenToUser.keys()).map(t => t.substring(0, 10) + '...').join(', ')}`);
+    }
+  }
+
+  return res.status(401).json({ error: "Unauthorized" });
 }
 
 // ============================================================
@@ -93,6 +113,20 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
         return res.status(500).json({ error: "Failed to create session" });
       }
 
+      // Generate auth token for API access
+      const token = generateAuthToken();
+
+      // Store token-to-user mapping for API authentication
+      tokenToUser.set(token, {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+      });
+
+      console.log(`✓ User signup, token generated: ${token.substring(0, 10)}...`);
+      console.log(`  Total tokens in map: ${tokenToUser.size}`);
+
       return res.status(201).json({
         user: {
           id: user.id,
@@ -100,6 +134,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
           username: user.username,
           displayName: user.displayName,
         },
+        token,
       });
     });
   } catch (error) {
@@ -182,11 +217,7 @@ router.post("/auth/logout", requireAuth, (req: Request, res: Response) => {
  * GET /api/auth/me
  * Get current authenticated user
  */
-router.get("/auth/me", (req: Request, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-
+router.get("/auth/me", requireAuth, (req: Request, res: Response) => {
   const user = req.user as any;
   return res.status(200).json({
     user: {

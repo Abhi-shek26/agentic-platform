@@ -155,10 +155,8 @@ async function runTestSuite(): Promise<void> {
 
     try {
       const e2eRunner = new E2ETestRunner();
-      // Note: This would run the full E2E tests
-      // For now, we're just including the structure
-      console.log('  E2E tests require running backend server');
-      console.log('  Run with: npm run test:e2e\n');
+      // Actually run the E2E tests
+      await e2eRunner.runAllTests();
     } catch (error) {
       console.error('  E2E tests skipped (backend not running)\n');
     }
