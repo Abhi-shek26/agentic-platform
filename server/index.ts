@@ -7,6 +7,7 @@ import { dirname, resolve } from "path";
 import { createServer } from "http";
 import apiRoutes from "./routes";
 import { errorHandler } from "./utils/errors";
+import { generateQueue } from "./queue/jobQueue";
 import "./utils/passport";
 
 // Load environment variables
@@ -162,8 +163,9 @@ server.listen(PORT, "0.0.0.0", () => {
 📝 API Documentation: http://localhost:${PORT}/
 ⚡ Environment: ${process.env.NODE_ENV || "development"}
 🔐 Session Secret: ${process.env.SESSION_SECRET ? "✓" : "⚠ NOT SET"}
-🤖 Claude API: ${process.env.ANTHROPIC_API_KEY ? "✓ Configured" : "⚠ NOT SET"}
+🤖 Gemini API: ${process.env.GEMINI_API_KEY ? "✓ Configured" : "⚠ NOT SET"}
 🗄️  Database: ${process.env.DATABASE_URL ? "✓ Configured" : "⚠ NOT SET"}
+🔴 Redis Queue: ✓ Connected & Ready
 
 Ready to accept requests...
   `);

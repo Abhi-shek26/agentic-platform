@@ -1,223 +1,194 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { TournamentSpecification, ArchitectureDesign, AgentOutput } from "@shared/types";
+import { specParserAgent } from "./agents/specParser";
+import {
+  createMockArchitectResponse,
+  createMockFrontendResponse,
+  createMockBackendResponse,
+  createMockDatabaseResponse,
+  createMockQAResponse,
+} from "./mock-agents";
 
 /**
- * Main AI Orchestrator Agent
+ * Main Orchestrator Agent
  * Coordinates all specialized agents to generate a complete tournament website
+ * Sequential + Parallel execution with progress tracking
  */
-export class OrchestratorAgent {
-  private client: Anthropic;
+export async function orchestratorAgent(
+  specification: any,
+  onProgress: (update: {
+    currentAgent?: string;
+    percentage?: number;
+    message?: string;
+    agents?: Array<{ name: string; status: string }>;
+  }) => void
+): Promise<any> {
+  console.log("🎯 Starting orchestration for:", specification.tournamentName);
 
-  constructor() {
-    this.client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+  const agents = [
+    { name: "SpecParser", status: "pending" },
+    { name: "Architect", status: "pending" },
+    { name: "Frontend", status: "pending" },
+    { name: "Backend", status: "pending" },
+    { name: "Database", status: "pending" },
+    { name: "Integration", status: "pending" },
+    { name: "Config", status: "pending" },
+    { name: "QA", status: "pending" },
+  ];
+
+  try {
+    // STEP 1: Spec Parser (5%)
+    agents[0].status = "processing";
+    onProgress({
+      currentAgent: "SpecParser",
+      percentage: 5,
+      message: "Parsing and validating specification...",
+      agents: agents,
     });
-  }
 
-  /**
-   * Orchestrate the entire code generation workflow
-   */
-  async generateWebsite(
-    spec: TournamentSpecification,
-    onProgress: (update: {
-      agent: string;
-      progress: number;
-      message: string;
-    }) => void
-  ): Promise<AgentOutput> {
-    try {
-      console.log("🎯 Starting orchestration for:", spec.tournamentName);
-
-      // Step 1: Spec Parser - Validate input
-      onProgress({
-        agent: "SpecParser",
-        progress: 5,
-        message: "Parsing and validating specification...",
-      });
-      const parsedSpec = await this.parseSpecification(spec);
-      if (!parsedSpec.success) {
-        throw new Error(`Spec parsing failed: ${parsedSpec.errors?.join(", ")}`);
-      }
-
-      // Step 2: Architect - Design project structure
-      onProgress({
-        agent: "Architect",
-        progress: 15,
-        message: "Designing project architecture...",
-      });
-      const architecture = await this.designArchitecture(spec);
-      if (!architecture.success) {
-        throw new Error(`Architecture design failed: ${architecture.errors?.join(", ")}`);
-      }
-
-      // Step 3-5: Generate code in parallel where possible
-      onProgress({
-        agent: "CodeGeneration",
-        progress: 30,
-        message: "Generating frontend, backend, and database code...",
-      });
-
-      // Step 6: Integrations
-      onProgress({
-        agent: "IntegrationSetup",
-        progress: 70,
-        message: "Setting up external integrations...",
-      });
-
-      // Step 7: Config
-      onProgress({
-        agent: "ConfigGenerator",
-        progress: 80,
-        message: "Generating configuration files...",
-      });
-
-      // Step 8: QA
-      onProgress({
-        agent: "QA",
-        progress: 90,
-        message: "Validating generated code...",
-      });
-
-      onProgress({
-        agent: "Complete",
-        progress: 100,
-        message: "Website generation complete!",
-      });
-
-      return {
-        success: true,
-        data: {
-          spec: parsedSpec,
-          architecture: architecture,
-          message: "Code generation complete",
-        },
-      };
-    } catch (error) {
-      console.error("❌ Orchestration failed:", error);
-      return {
-        success: false,
-        data: {},
-        errors: [error instanceof Error ? error.message : "Unknown error"],
-      };
+    const parsedSpec = await specParserAgent(specification);
+    if (!parsedSpec.success) {
+      throw new Error(`Spec parsing failed: ${parsedSpec.errors?.join(", ")}`);
     }
-  }
+    agents[0].status = "completed";
 
-  /**
-   * Specification Parser Agent
-   */
-  private async parseSpecification(
-    spec: TournamentSpecification
-  ): Promise<AgentOutput> {
-    try {
-      // TODO: Call Claude to validate and structure the specification
-      // For now, just validate basic fields
-      const errors: string[] = [];
+    // STEP 2: Architect (15%)
+    agents[1].status = "processing";
+    onProgress({
+      currentAgent: "Architect",
+      percentage: 15,
+      message: "Designing project architecture...",
+      agents: agents,
+    });
 
-      if (!spec.tournamentName) errors.push("Tournament name is required");
-      if (!spec.tournamentDate) errors.push("Tournament date is required");
-      if (!spec.location) errors.push("Location is required");
-      if (!spec.pages || spec.pages.length === 0)
-        errors.push("At least one page is required");
+    const architecture = createMockArchitectResponse();
+    agents[1].status = "completed";
 
-      if (errors.length > 0) {
-        return {
-          success: false,
-          data: {},
-          errors,
-        };
+    // STEP 3-5: Code Generation (Frontend, Backend, Database) in PARALLEL (60%)
+    agents[2].status = "processing";
+    agents[3].status = "processing";
+    agents[4].status = "processing";
+    onProgress({
+      currentAgent: "Frontend/Backend/Database",
+      percentage: 30,
+      message: "Generating frontend, backend, and database code in parallel...",
+      agents: agents,
+    });
+
+    const [frontend, backend, database] = await Promise.all([
+      createMockFrontendResponse(),
+      createMockBackendResponse(),
+      createMockDatabaseResponse(),
+    ]);
+
+    agents[2].status = "completed";
+    agents[3].status = "completed";
+    agents[4].status = "completed";
+
+    // STEP 6: Integrations (70%)
+    agents[5].status = "processing";
+    onProgress({
+      currentAgent: "Integration",
+      percentage: 60,
+      message: "Setting up external integrations...",
+      agents: agents,
+    });
+
+    // Mock integration response
+    const integration = {
+      success: true,
+      data: {
+        integrationCode: {
+          googleSheets: "// Google Sheets setup code",
+          customApis: "// Custom API integration code",
+        },
+        environmentVars: ["GOOGLE_SHEETS_API_KEY"],
+      },
+    };
+    agents[5].status = "completed";
+
+    // STEP 7: Config (80%)
+    agents[6].status = "processing";
+    onProgress({
+      currentAgent: "Config",
+      percentage: 70,
+      message: "Generating configuration files...",
+      agents: agents,
+    });
+
+    // Mock config response
+    const config = {
+      success: true,
+      data: {
+        packageJson: {
+          name: "tournament-website",
+          version: "1.0.0",
+          dependencies: {
+            react: "^18.3.1",
+            express: "^4.21.2",
+          },
+        },
+        tsconfig: { compilerOptions: { strict: true } },
+      },
+    };
+    agents[6].status = "completed";
+
+    // STEP 8: QA (90%)
+    agents[7].status = "processing";
+    onProgress({
+      currentAgent: "QA",
+      percentage: 85,
+      message: "Validating generated code...",
+      agents: agents,
+    });
+
+    const qa = createMockQAResponse();
+    agents[7].status = "completed";
+
+    // FINAL: Complete (100%)
+    onProgress({
+      currentAgent: "Complete",
+      percentage: 100,
+      message: "Website generation complete!",
+      agents: agents,
+    });
+
+    console.log("✅ Orchestration completed successfully");
+
+    return {
+      success: true,
+      data: {
+        parsedSpec,
+        architecture,
+        frontend,
+        backend,
+        database,
+        integration,
+        config,
+        qa,
+        message: "Code generation complete",
+      },
+    };
+  } catch (error) {
+    console.error("❌ Orchestration failed:", error);
+
+    // Mark all remaining agents as failed
+    agents.forEach((agent) => {
+      if (agent.status === "pending" || agent.status === "processing") {
+        agent.status = "failed";
       }
+    });
 
-      return {
-        success: true,
-        data: { parsedSpec: spec },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        data: {},
-        errors: [error instanceof Error ? error.message : "Parsing failed"],
-      };
-    }
-  }
+    onProgress({
+      currentAgent: "Error",
+      percentage: 0,
+      message: `Orchestration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      agents: agents,
+    });
 
-  /**
-   * Architect Agent
-   */
-  private async designArchitecture(
-    spec: TournamentSpecification
-  ): Promise<AgentOutput> {
-    try {
-      // TODO: Call Claude to design the architecture
-      const architecture: ArchitectureDesign = {
-        projectName: spec.tournamentName,
-        folderStructure: {
-          name: "project-root",
-          type: "folder",
-          children: [
-            { name: "client", type: "folder" },
-            { name: "server", type: "folder" },
-            { name: "shared", type: "folder" },
-          ],
-        },
-        pages: [],
-        components: [],
-        database: {
-          tables: [],
-          relationships: [],
-        },
-        apiEndpoints: [],
-        integrations: [],
-      };
-
-      return {
-        success: true,
-        data: { architecture },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        data: {},
-        errors: [error instanceof Error ? error.message : "Architecture design failed"],
-      };
-    }
+    return {
+      success: false,
+      data: {},
+      errors: [error instanceof Error ? error.message : "Unknown error"],
+    };
   }
 }
 
-/**
- * Simplified agent output for testing
- */
-export async function testOrchestratorAgent() {
-  const orchestrator = new OrchestratorAgent();
-
-  const testSpec: TournamentSpecification = {
-    tournamentName: "Test Chess Tournament",
-    tournamentDate: "2026-04-15",
-    location: "New York, NY",
-    description: "A test chess tournament",
-    colorScheme: {
-      primary: "#0ea5e9",
-      secondary: "#64748b",
-      accent: "#ec4899",
-      background: "#ffffff",
-      text: "#1e293b",
-    },
-    pages: [
-      { name: "home", type: "home", title: "Home" },
-      { name: "info", type: "info", title: "Info" },
-    ],
-    hasRegistration: true,
-    sections: [
-      { id: "open", name: "Open", timeControl: "90+30" },
-    ],
-    customizations: {},
-    integrations: [],
-  };
-
-  const result = await orchestrator.generateWebsite(testSpec, (update) => {
-    console.log(
-      `${update.agent}: ${update.progress}% - ${update.message}`
-    );
-  });
-
-  return result;
-}

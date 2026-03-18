@@ -9,6 +9,8 @@ import {
   ValidationError,
   AuthenticationError,
 } from "./utils/auth";
+import { queueGenerationJob, getJobStatus } from "./queue/jobQueue";
+import { GenerationProgressTracker } from "./utils/progressEmitter";
 
 const router = Router();
 
@@ -377,7 +379,8 @@ router.post(
         status: "queued",
       });
 
-      // TODO: Queue job in Bull queue for processing by orchestrator
+      // Queue job in Bull queue for processing by orchestrator
+      await queueGenerationJob(projectId, project.specification);
 
       res.status(202).json({
         jobId: job.id,
@@ -395,28 +398,27 @@ router.post(
 
 /**
  * GET /api/projects/:id/generation-status
- * Get real-time generation status
+ * Get real-time generation status and progress
  */
 router.get(
   "/projects/:id/generation-status",
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      // TODO: Get status from generation job queue
+      const projectId = req.params.id;
+
+      // Get latest progress from tracker
+      const progress = GenerationProgressTracker.getProgress(projectId);
+
+      // Get job status from Bull queue
+      const jobId = `generation-${projectId}`;
+      const jobStatus = await getJobStatus(jobId);
+
+      // Return combined status
       res.status(200).json({
-        status: "queued",
-        progress: 0,
-        message: "Waiting in queue...",
-        agents: [
-          { name: "SpecParser", status: "pending" },
-          { name: "Architect", status: "pending" },
-          { name: "Frontend", status: "pending" },
-          { name: "Backend", status: "pending" },
-          { name: "Database", status: "pending" },
-          { name: "Integration", status: "pending" },
-          { name: "Config", status: "pending" },
-          { name: "QA", status: "pending" },
-        ],
+        ...progress,
+        jobId: jobStatus?.jobId,
+        bullState: jobStatus?.state,
       });
     } catch (error) {
       res.status(500).json({
