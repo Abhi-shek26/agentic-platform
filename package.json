@@ -15,7 +15,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "tsx scripts/run-tests.ts",
     "test:unit": "tsx scripts/run-tests.ts",
-    "test:e2e": "E2E_TESTS=true tsx scripts/run-tests.ts",
+    "test:e2e": "cross-env E2E_TESTS=true tsx scripts/run-tests.ts",
     "test:quality": "tsx scripts/run-tests.ts",
     "db:push": "drizzle-kit push --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",

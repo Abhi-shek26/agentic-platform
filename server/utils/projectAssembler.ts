@@ -4,8 +4,8 @@
  */
 
 import * as path from 'path';
-import { CodeGenerator } from './codeGenerator';
-import { FileAssembler } from './fileAssembler';
+import { CodeGenerator } from '../codegen/generators/codeGenerator';
+import { FileAssembler } from '../codegen/generators/fileAssembler';
 
 export interface AssemblerResult {
   success: boolean;

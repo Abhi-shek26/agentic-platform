@@ -4,10 +4,11 @@
  */
 
 export const packageJsonTemplate = (projectData: any): Record<string, any> => {
-  const { name, description, version = '1.0.0' } = projectData;
+  const { name, projectName, description, version = '1.0.0' } = projectData;
+  const projectTitle = name || projectName || 'tournament-website';
 
   return {
-    name: name.toLowerCase().replace(/\s+/g, '-'),
+    name: projectTitle.toLowerCase().replace(/\s+/g, '-'),
     version,
     description,
     type: 'module',

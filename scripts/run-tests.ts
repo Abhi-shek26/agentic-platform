@@ -5,8 +5,8 @@
  * Runs Unit Tests + E2E Tests + Code Quality Check
  */
 
-import { CodeQualityTests } from './codegen.test';
-import { E2ETestRunner } from './e2e.test';
+import { CodeQualityTests } from '../server/tests/codegen.test';
+import { E2ETestRunner } from '../server/tests/e2e.test';
 
 interface TestReport {
   timestamp: string;
