@@ -185,6 +185,7 @@ class E2ETestRunner {
         '/api/projects',
         {
           name: 'Test Tournament Website',
+          slug: `test-tournament-${this.testSuffix}`,
           description: 'A test tournament for E2E testing',
           specification: {
             tournamentName: 'Test Chess Championship',
@@ -364,12 +365,26 @@ class E2ETestRunner {
         return { success: false, error: 'Missing auth or project ID' };
       }
 
+      // First, check project status to debug
+      const projectCheck = await this.api.get(`/api/projects/${this.projectId}`, {
+        headers: { Authorization: `Bearer ${this.authToken}` },
+      });
+
+      if (projectCheck.status === 200) {
+        const projectData = projectCheck.data.project as any;
+        const projectStatus = projectData?.status;
+        const generatedPath = projectData?.generatedCodePath;
+        const orgId = projectData?.organizationId;
+        console.log(`    Debug: Project status=${projectStatus}, generatedCodePath=${generatedPath}, orgId=${orgId}`);
+        console.log(`    Debug: User ID=${this.userId}`);
+      }
+
       const response = await this.api.get(`/api/projects/${this.projectId}/code-info`, {
         headers: { Authorization: `Bearer ${this.authToken}` },
       });
 
       if (response.status !== 200) {
-        return { success: false, error: `Expected 200, got ${response.status}` };
+        return { success: false, error: `Expected 200, got ${response.status}`, details: JSON.stringify(response.data).substring(0, 100) };
       }
 
       const fileCount = response.data.fileCount || 0;
@@ -390,7 +405,8 @@ class E2ETestRunner {
       });
 
       if (response.status !== 200) {
-        return { success: false, error: `Expected 200, got ${response.status}` };
+        const errorData = response.data?.toString?.('utf-8') || JSON.stringify(response.data);
+        return { success: false, error: `Expected 200, got ${response.status}`, details: errorData.substring(0, 200) };
       }
 
       const size = response.data.length || 0;

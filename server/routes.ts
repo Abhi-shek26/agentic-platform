@@ -278,7 +278,8 @@ router.post("/projects", requireAuth, async (req: Request, res: Response) => {
     }
 
     // TODO: Get or create user's primary organization
-    const orgId = "default-org-id"; // Placeholder
+    // For now, use user ID as organization ID for ownership tracking
+    const orgId = user.id;
 
     const project = await storage.createProject({
       organizationId: orgId,
