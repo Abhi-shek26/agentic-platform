@@ -34,10 +34,21 @@ export default function ProjectForm() {
         throw new Error('Please fill in all required fields');
       }
 
+      // Generate slug from tournament name (lowercase, replace spaces with hyphens)
+      const slug = formData.tournamentName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      if (!slug) {
+        throw new Error('Tournament name must contain at least one letter or number');
+      }
+
       // Create project
       console.log('Creating project with spec:', formData);
       const projectRes = await createProject({
         name: formData.tournamentName,
+        slug: slug,
         description: formData.description,
         specification: formData,
       });
