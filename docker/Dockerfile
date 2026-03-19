@@ -8,6 +8,7 @@ RUN apk add --no-cache python3 make g++
 # Copy package files
 COPY package*.json ./
 COPY tsconfig.json ./
+COPY vite.config.ts ./
 
 # Install dependencies
 RUN npm ci && npm cache clean --force
@@ -16,11 +17,11 @@ RUN npm ci && npm cache clean --force
 COPY shared ./shared
 COPY server ./server
 COPY client ./client
-COPY vite.config.ts ./
 COPY tailwind.config.ts ./
 COPY drizzle.config.ts ./
 
-# Expose port
+# Build frontend
+RUN npm run build:client
 EXPOSE 5000
 
 # Health check

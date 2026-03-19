@@ -3,7 +3,7 @@
  * Handles downloading generated projects as ZIP files
  */
 
-const archiver = require('archiver');
+import archiver from 'archiver';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Response } from 'express';
