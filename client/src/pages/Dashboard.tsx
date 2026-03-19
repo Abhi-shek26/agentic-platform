@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { listProjects } from '../lib/api';
 
 interface Project {
   id: string;
@@ -11,7 +12,6 @@ interface Project {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +19,11 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/projects');
-        if (res.status === 401) {
-          navigate('/login');
+        const data = await listProjects();
+        if (data.error) {
+          setError(data.error);
           return;
         }
-        const data = await res.json();
         setProjects(data.projects || []);
         setError(null);
       } catch (err) {
@@ -35,7 +34,7 @@ export default function Dashboard() {
     };
 
     fetchProjects();
-  }, [navigate]);
+  }, []);
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
