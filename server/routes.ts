@@ -180,21 +180,29 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Set session
-    req.login(user, (err) => {
-      if (err) {
-        return res.status(500).json({ error: "Failed to create session" });
-      }
+    // Generate auth token for API access
+    const token = generateAuthToken();
 
-      return res.status(200).json({
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          displayName: user.displayName,
-        },
-      });
+    // Store token-to-user mapping
+    tokenToUser.set(token, {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
     });
+
+    // ✅ RETURN TOKEN IN LOGIN RESPONSE
+    const response = {
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+      },
+      token: token,  // ← TOKEN EXPLICITLY RETURNED HERE
+    };
+
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({
