@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getGenerationStatus } from '../lib/api';
+import { getGenerationStatus, downloadCode } from '../lib/api';
 
 interface Agent {
   name: string;
@@ -72,6 +72,28 @@ export default function GenerationProgress() {
       clearInterval(pollInterval);
     };
   }, [projectId]);
+
+  const handleDownload = async () => {
+    try {
+      const res = await downloadCode(projectId!);
+      if (!res.ok) {
+        alert(`Download failed: ${res.statusText}`);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tournament-website-${projectId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(`Download error: ${err}`);
+    }
+  };
 
   if (loading && !progress) {
     return (
@@ -184,13 +206,12 @@ export default function GenerationProgress() {
                 View Projects
               </button>
               {progress.projectPath && (
-                <a
-                  href={`http://localhost:5000/api/projects/${projectId}/code`}
-                  download
+                <button
+                  onClick={handleDownload}
                   className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                 >
                   Download Code
-                </a>
+                </button>
               )}
             </div>
           </div>

@@ -28,6 +28,7 @@ const tokenToUser = new Map<string, any>();
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   // Check session first (for browser-based requests)
   if (req.user) {
+    console.log(`[DEBUG] Auth via session - User ID: ${(req.user as any).id}`);
     return next();
   }
 
@@ -36,7 +37,9 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7);
     const user = tokenToUser.get(token);
+    console.log(`[DEBUG] Token lookup - Token: ${token.substring(0, 10)}..., Found: ${!!user}, Total in map: ${tokenToUser.size}`);
     if (user) {
+      console.log(`[DEBUG] Auth via token - User ID: ${user.id}`);
       req.user = user;
       return next();
     } else {
@@ -242,9 +245,10 @@ router.get("/projects", requireAuth, async (req: Request, res: Response) => {
   try {
     const user = req.user as any;
 
-    // TODO: Get user's primary organization and list projects
-    // For now, return empty array
-    const projects = [];
+    // Get user's projects (using user.id as organizationId for now)
+    console.log(`[DEBUG] GET /projects - User ID: ${user.id}`);
+    const projects = await storage.listProjects(user.id);
+    console.log(`[DEBUG] GET /projects - Found ${projects.length} projects`);
 
     res.status(200).json({ projects });
   } catch (error) {
@@ -281,6 +285,7 @@ router.post("/projects", requireAuth, async (req: Request, res: Response) => {
     // For now, use user ID as organization ID for ownership tracking
     const orgId = user.id;
 
+    console.log(`[DEBUG] Creating project - User ID: ${user.id}, Org ID: ${orgId}`);
     const project = await storage.createProject({
       organizationId: orgId,
       name,
@@ -288,6 +293,8 @@ router.post("/projects", requireAuth, async (req: Request, res: Response) => {
       description,
       specification,
     });
+
+    console.log(`[DEBUG] Project created - Project ID: ${project.id}, Org ID: ${project.organizationId}`);
 
     res.status(201).json({
       project: {
