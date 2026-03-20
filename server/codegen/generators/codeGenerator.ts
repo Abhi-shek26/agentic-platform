@@ -45,30 +45,52 @@ export class CodeGenerator {
     const files: Array<{ path: string; content: string; type: 'typescript' | 'json' | 'plaintext' | 'yaml' }> = [];
     const errors: string[] = [];
 
+    console.log('[COMPONENTS] frontendData:', JSON.stringify(frontendData).substring(0, 300));
+    console.log('[COMPONENTS] frontendData.components exists?', !!frontendData?.components);
+    console.log('[COMPONENTS] frontendData.components type:', typeof frontendData?.components);
+    if (frontendData?.components) {
+      console.log('[COMPONENTS] components array length:', frontendData.components.length);
+    }
+
     try {
       if (!frontendData?.components) {
+        console.log('[COMPONENTS] ❌ No components data - returning error');
         return { success: false, files: [], errors: ['No components data provided'] };
       }
 
+      console.log('[COMPONENTS] ✓ Found components, generating...');
       for (const component of frontendData.components) {
         try {
-          const code = componentTemplate(component);
+          // If mock agent already provides code, use it directly
+          let code: string;
+          if (component.code) {
+            code = component.code;
+            console.log(`[COMPONENTS] ✓ Using pre-generated code for ${component.name} (${code.length} bytes)`);
+          } else {
+            // Otherwise render from template
+            code = componentTemplate(component);
+            console.log(`[COMPONENTS] ✓ Rendered template for ${component.name} (${code.length} bytes)`);
+          }
+
           files.push({
             path: `client/src/components/${component.name}.tsx`,
             content: code,
             type: 'typescript',
           });
         } catch (error) {
+          console.log(`[COMPONENTS] ✗ Failed to generate ${component.name}:`, error);
           errors.push(`Failed to generate component ${component.name}: ${error}`);
         }
       }
 
+      console.log(`[COMPONENTS] Generated ${files.length} component files`);
       return {
         success: errors.length === 0,
         files,
         errors: errors.length > 0 ? errors : undefined,
       };
     } catch (error) {
+      console.log('[COMPONENTS] ❌ Exception:', error);
       return {
         success: false,
         files,
@@ -84,31 +106,54 @@ export class CodeGenerator {
     const files: Array<{ path: string; content: string; type: 'typescript' | 'json' | 'plaintext' | 'yaml' }> = [];
     const errors: string[] = [];
 
+    console.log('[PAGES] frontendData:', JSON.stringify(frontendData).substring(0, 300));
+    console.log('[PAGES] frontendData.pages exists?', !!frontendData?.pages);
+    console.log('[PAGES] frontendData.pages type:', typeof frontendData?.pages);
+    if (frontendData?.pages) {
+      console.log('[PAGES] pages array length:', frontendData.pages.length);
+    }
+
     try {
       if (!frontendData?.pages) {
+        console.log('[PAGES] ❌ No pages data - returning error');
         return { success: false, files: [], errors: ['No pages data provided'] };
       }
 
+      console.log('[PAGES] ✓ Found pages, generating...');
       for (const page of frontendData.pages) {
         try {
-          const code = pageTemplate(page);
+          // If mock agent already provides code, use it directly
+          let code: string;
           const filename = page.name.toLowerCase().replace(/\s+/g, '-');
+
+          if (page.code) {
+            code = page.code;
+            console.log(`[PAGES] ✓ Using pre-generated code for ${page.name} → ${filename}.tsx (${code.length} bytes)`);
+          } else {
+            // Otherwise render from template
+            code = pageTemplate(page);
+            console.log(`[PAGES] ✓ Rendered template for ${page.name} → ${filename}.tsx (${code.length} bytes)`);
+          }
+
           files.push({
             path: `client/src/pages/${filename}.tsx`,
             content: code,
             type: 'typescript',
           });
         } catch (error) {
+          console.log(`[PAGES] ✗ Failed to generate ${page.name}:`, error);
           errors.push(`Failed to generate page ${page.name}: ${error}`);
         }
       }
 
+      console.log(`[PAGES] Generated ${files.length} page files`);
       return {
         success: errors.length === 0,
         files,
         errors: errors.length > 0 ? errors : undefined,
       };
     } catch (error) {
+      console.log('[PAGES] ❌ Exception:', error);
       return {
         success: false,
         files,
@@ -124,8 +169,15 @@ export class CodeGenerator {
     const files: Array<{ path: string; content: string; type: 'typescript' | 'json' | 'plaintext' | 'yaml' }> = [];
     const errors: string[] = [];
 
+    console.log('[ROUTES] backendData:', JSON.stringify(backendData).substring(0, 300));
+    console.log('[ROUTES] backendData.routes exists?', !!backendData?.routes);
+    if (backendData?.routes) {
+      console.log('[ROUTES] routes array length:', backendData.routes.length);
+    }
+
     try {
       if (!backendData?.routes) {
+        console.log('[ROUTES] ❌ No routes data - returning error');
         return { success: false, files: [], errors: ['No routes data provided'] };
       }
 
@@ -133,7 +185,18 @@ export class CodeGenerator {
 
       for (const route of backendData.routes) {
         try {
-          const code = routeTemplate(route);
+          let code: string;
+
+          if (route.code) {
+            // Use pre-generated code if available
+            code = route.code;
+            console.log(`[ROUTES] ✓ Using pre-generated code for ${route.method} ${route.path}`);
+          } else {
+            // Otherwise render from template
+            code = routeTemplate(route);
+            console.log(`[ROUTES] ✓ Rendered template for ${route.method} ${route.path}`);
+          }
+
           const group = route.group || 'index';
 
           if (!routesByGroup[group]) {
@@ -141,6 +204,7 @@ export class CodeGenerator {
           }
           routesByGroup[group].push(code);
         } catch (error) {
+          console.log(`[ROUTES] ✗ Failed to generate route ${route.path}:`, error);
           errors.push(`Failed to generate route ${route.path}: ${error}`);
         }
       }
@@ -159,14 +223,18 @@ const router = Router();
           content,
           type: 'typescript',
         });
+
+        console.log(`[ROUTES] ✓ Combined ${routeCodes.length} routes into server/routes/${group}.ts`);
       }
 
+      console.log(`[ROUTES] Generated ${files.length} route files`);
       return {
         success: errors.length === 0,
         files,
         errors: errors.length > 0 ? errors : undefined,
       };
     } catch (error) {
+      console.log('[ROUTES] ❌ Exception:', error);
       return {
         success: false,
         files,
