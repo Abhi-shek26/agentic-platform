@@ -281,6 +281,11 @@ const router = Router();
     const allErrors: string[] = [];
 
     console.log('🔨 Generating project:', data.projectName);
+    console.log('[DEBUG] Received data keys:', Object.keys(data));
+    console.log('[DEBUG] frontend type:', typeof data.frontend);
+    console.log('[DEBUG] frontend:', JSON.stringify(data.frontend).substring(0, 200));
+    console.log('[DEBUG] backend type:', typeof data.backend);
+    console.log('[DEBUG] backend:', JSON.stringify(data.backend).substring(0, 200));
 
     // Generate components
     const components = this.generateComponents(data.frontend);
@@ -306,6 +311,9 @@ const router = Router();
     const configs = this.generateConfigs(data);
     allFiles.push(...configs.files);
     if (configs.errors) allErrors.push(...configs.errors);
+
+    console.log(`[DEBUG] Total files generated: ${allFiles.length}`);
+    console.log(`[DEBUG] Components: ${components.files.length}, Pages: ${pages.files.length}, Routes: ${routes.files.length}`);
 
     return {
       success: allErrors.length === 0,

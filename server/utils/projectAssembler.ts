@@ -74,6 +74,13 @@ export class ProjectAssembler {
 
       // Generate all code
       console.log('\n🔨 Generating code files...');
+      console.log('[DEBUG] generationData keys:', Object.keys(generationData));
+      console.log('[DEBUG] generationData.frontend type:', typeof generationData.frontend);
+      if (generationData.frontend) {
+        console.log('[DEBUG] frontend keys:', Object.keys(generationData.frontend));
+        console.log('[DEBUG] frontend.components length:', generationData.frontend.components?.length);
+      }
+
       const codeGenResult = CodeGenerator.generateProject({
         projectName,
         specification: generationData.specification,
