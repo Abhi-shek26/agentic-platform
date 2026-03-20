@@ -156,14 +156,14 @@ export async function orchestratorAgent(
     return {
       success: true,
       data: {
-        parsedSpec,
-        architecture,
-        frontend,
-        backend,
-        database,
-        integration,
-        config,
-        qa,
+        specification: parsedSpec.data.validatedSpec,
+        architecture: architecture.data,
+        frontend: frontend.data,  // ← Extract .data
+        backend: backend.data,    // ← Extract .data
+        database: database.data,  // ← Extract .data
+        integration: integration.data,
+        config: config.data,
+        qa: qa.data,
         message: "Code generation complete",
       },
     };
