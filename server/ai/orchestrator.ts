@@ -1,11 +1,11 @@
 import { specParserAgent } from "./agents/specParser";
-import {
-  createMockArchitectResponse,
-  createMockFrontendResponse,
-  createMockBackendResponse,
-  createMockDatabaseResponse,
-  createMockQAResponse,
-} from "./mock-agents";
+import { architectAgent } from "./agents/architect";
+import { frontendAgent } from "./agents/frontend";
+import { backendAgent } from "./agents/backend";
+import { databaseAgent } from "./agents/database";
+import { integrationAgent } from "./agents/integration";
+import { configAgent } from "./agents/config";
+import { qaAgent } from "./agents/qa";
 
 /**
  * Main Orchestrator Agent
@@ -59,7 +59,10 @@ export async function orchestratorAgent(
       agents: agents,
     });
 
-    const architecture = createMockArchitectResponse();
+    const architecture = await architectAgent(parsedSpec.data.validatedSpec);
+    if (!architecture.success) {
+      throw new Error(`Architecture design failed: ${architecture.errors?.join(", ")}`);
+    }
     agents[1].status = "completed";
 
     // STEP 3-5: Code Generation (Frontend, Backend, Database) in PARALLEL (60%)
@@ -74,9 +77,9 @@ export async function orchestratorAgent(
     });
 
     const [frontend, backend, database] = await Promise.all([
-      createMockFrontendResponse(),
-      createMockBackendResponse(),
-      createMockDatabaseResponse(),
+      frontendAgent(parsedSpec.data.validatedSpec, architecture.data),
+      backendAgent(parsedSpec.data.validatedSpec, architecture.data),
+      databaseAgent(parsedSpec.data.validatedSpec, architecture.data),
     ]);
 
     agents[2].status = "completed";
@@ -92,17 +95,10 @@ export async function orchestratorAgent(
       agents: agents,
     });
 
-    // Mock integration response
-    const integration = {
-      success: true,
-      data: {
-        integrationCode: {
-          googleSheets: "// Google Sheets setup code",
-          customApis: "// Custom API integration code",
-        },
-        environmentVars: ["GOOGLE_SHEETS_API_KEY"],
-      },
-    };
+    const integration = await integrationAgent(parsedSpec.data.validatedSpec);
+    if (!integration.success) {
+      console.warn("Integration setup had issues, continuing with defaults");
+    }
     agents[5].status = "completed";
 
     // STEP 7: Config (80%)
@@ -114,21 +110,10 @@ export async function orchestratorAgent(
       agents: agents,
     });
 
-    // Mock config response
-    const config = {
-      success: true,
-      data: {
-        packageJson: {
-          name: "tournament-website",
-          version: "1.0.0",
-          dependencies: {
-            react: "^18.3.1",
-            express: "^4.21.2",
-          },
-        },
-        tsconfig: { compilerOptions: { strict: true } },
-      },
-    };
+    const config = await configAgent(parsedSpec.data.validatedSpec);
+    if (!config.success) {
+      throw new Error(`Config generation failed: ${config.errors?.join(", ")}`);
+    }
     agents[6].status = "completed";
 
     // STEP 8: QA (90%)
@@ -140,7 +125,18 @@ export async function orchestratorAgent(
       agents: agents,
     });
 
-    const qa = createMockQAResponse();
+    // Prepare all files for QA validation
+    const allGeneratedFiles = {
+      frontend: frontend.data?.components || [],
+      backend: backend.data?.routes || [],
+      database: database.data?.schema || "",
+      config: config.data || {},
+    };
+
+    const qa = await qaAgent(allGeneratedFiles);
+    if (!qa.success) {
+      console.warn("QA validation found issues but continuing");
+    }
     agents[7].status = "completed";
 
     // FINAL: Complete (100%)
@@ -158,12 +154,12 @@ export async function orchestratorAgent(
       data: {
         specification: parsedSpec.data.validatedSpec,
         architecture: architecture.data,
-        frontend: frontend.data,  // ← Extract .data
-        backend: backend.data,    // ← Extract .data
-        database: database.data,  // ← Extract .data
-        integration: integration.data,
+        frontend: frontend.data,
+        backend: backend.data,
+        database: database.data,
+        integration: integration.data || {},
         config: config.data,
-        qa: qa.data,
+        qa: qa.data || {},
         message: "Code generation complete",
       },
     };
@@ -191,4 +187,5 @@ export async function orchestratorAgent(
     };
   }
 }
+
 
