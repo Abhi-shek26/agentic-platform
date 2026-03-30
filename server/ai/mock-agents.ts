@@ -524,10 +524,7 @@ export const formatTime = (time: string): string => {
   return time; // Time is already formatted like "10:00 AM"
 };`,
         },
-      ],
-    },
-  };
-}
+        {
           name: "calculateRatings",
           code: `export function calculateRatings(participants: any[]) {
   return participants.sort((a, b) => (b.rating || 0) - (a.rating || 0));
@@ -559,6 +556,49 @@ export const participants = pgTable('participants', {
   rating: integer('rating'),
 });`,
       migrations: ["001_create_tournaments.sql", "002_create_participants.sql"],
+    },
+  };
+}
+
+export function createMockIntegrationResponse() {
+  return {
+    success: true,
+    data: {
+      integrations: [
+        {
+          name: "google-sheets",
+          status: "configured",
+          envVars: ["GOOGLE_SHEETS_ID", "GOOGLE_SERVICE_ACCOUNT_KEY"],
+        },
+      ],
+      steps: [
+        "Create a Google Cloud service account",
+        "Share the target sheet with the service account email",
+        "Add credentials to environment variables",
+      ],
+    },
+  };
+}
+
+export function createMockConfigResponse() {
+  return {
+    success: true,
+    data: {
+      files: [
+        {
+          path: "package.json",
+          description: "Project scripts and dependencies",
+        },
+        {
+          path: "tsconfig.json",
+          description: "TypeScript compiler options",
+        },
+        {
+          path: "vite.config.ts",
+          description: "Frontend build and dev server configuration",
+        },
+      ],
+      notes: ["Enable strict mode for better type safety"],
     },
   };
 }
