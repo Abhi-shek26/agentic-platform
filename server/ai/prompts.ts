@@ -1,5 +1,5 @@
 /**
- * AI Agent Prompts for Gemini 2.0 Flash
+ * AI Agent Prompts for Claude API
  * Comprehensive prompts for production-quality code generation
  * Similar to Lovable - generate complete, working websites from specs
  */

@@ -1,12 +1,12 @@
 import { AgentOutput } from "@shared/types";
-import { callGemini } from "../client";
+import { callClaude } from "../client";
 import { BACKEND_PROMPT, createPrompt } from "../prompts";
 import { createMockBackendResponse } from "../mock-agents";
 
 /**
  * Backend Agent
  * Generates Express routes, middleware, and business logic
- * Uses Gemini 2.0 Flash for fast, free code generation
+ * Uses Claude API for fast, reliable code generation
  */
 export async function backendAgent(
   spec: any,
@@ -24,7 +24,7 @@ export async function backendAgent(
     const prompt = createPrompt(BACKEND_PROMPT, fullSpec);
 
     // Call Claude API
-    const parsedResponse = await callGemini(prompt);
+    const parsedResponse = await callClaude(prompt);
         data: {},
         errors: ["Failed to parse backend code generation response"],
       };

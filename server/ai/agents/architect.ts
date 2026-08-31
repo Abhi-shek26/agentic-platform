@@ -1,5 +1,5 @@
 import { AgentOutput } from "@shared/types";
-import { callGemini } from "../client";
+import { callClaude } from "../client";
 import { ARCHITECT_PROMPT, createPrompt } from "../prompts";
 import { createMockArchitectResponse } from "../mock-agents";
 
@@ -22,7 +22,7 @@ export async function architectAgent(
     const prompt = createPrompt(ARCHITECT_PROMPT, spec);
 
     // Call Claude API
-    const parsedResponse = await callGemini(prompt);
+    const parsedResponse = await callClaude(prompt);
         data: {},
         errors: ["Failed to parse architecture design response"],
       };

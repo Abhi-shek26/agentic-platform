@@ -1,12 +1,12 @@
 import { AgentOutput } from "@shared/types";
-import { model } from "../client";
+import { callClaude } from "../client";
 import { DATABASE_PROMPT, createPrompt } from "../prompts";
 import { createMockDatabaseResponse } from "../mock-agents";
 
 /**
  * Database Agent
- * Generates Drizzle ORM schemas and database migrations
- * Uses Gemini 2.0 Flash for fast, free schema generation
+ * Generates Drizzle ORM schema and migrations
+ * Uses Claude API for fast, reliable schema generation
  */
 export async function databaseAgent(
   spec: any,
@@ -23,27 +23,8 @@ export async function databaseAgent(
     const fullSpec = { specification: spec, architecture };
     const prompt = createPrompt(DATABASE_PROMPT, fullSpec);
 
-    // Call Gemini API
-    const result = await model.generateContent([{ text: prompt }]);
-    const responseText = result.response.text();
-
-    // Parse JSON response
-    let parsedResponse;
-    try {
-      // Extract JSON from response (in case there's markdown formatting)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
-      parsedResponse = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      return {
-        success: false,
-        data: {},
-        errors: ["Failed to parse database schema generation response"],
-      };
-    }
+    // Call Claude API
+    const parsedResponse = await callClaude(prompt);
 
     // Validate response structure
     if (!parsedResponse.success) {

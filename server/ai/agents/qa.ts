@@ -1,12 +1,12 @@
 import { AgentOutput } from "@shared/types";
-import { model } from "../client";
+import { callClaude } from "../client";
 import { QA_PROMPT, createPrompt } from "../prompts";
 import { createMockQAResponse } from "../mock-agents";
 
 /**
  * QA Agent
  * Validates all generated code for correctness and quality
- * Uses Gemini 2.0 Flash for fast, free code validation
+ * Uses Claude API for fast, reliable code validation
  */
 export async function qaAgent(
   allGeneratedFiles: any
@@ -21,27 +21,8 @@ export async function qaAgent(
     // Create the full prompt with all generated code
     const prompt = createPrompt(QA_PROMPT, allGeneratedFiles);
 
-    // Call Gemini API
-    const result = await model.generateContent([{ text: prompt }]);
-    const responseText = result.response.text();
-
-    // Parse JSON response
-    let parsedResponse;
-    try {
-      // Extract JSON from response (in case there's markdown formatting)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
-      parsedResponse = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      return {
-        success: false,
-        data: {},
-        errors: ["Failed to parse QA validation response"],
-      };
-    }
+    // Call Claude API
+    const parsedResponse = await callClaude(prompt);
 
     // Validate response structure
     if (!parsedResponse.success) {

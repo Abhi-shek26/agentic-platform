@@ -2,7 +2,7 @@
  * Mock Agents for Testing
  * Returns realistic generated code without API calls
  * Useful for testing queue, progress tracking, and UI
- * Switch to real Gemini by deleting this and using real agents
+ * Switch to real Claude by deleting this and using real agents
  */
 
 export function createMockSpecParserResponse() {

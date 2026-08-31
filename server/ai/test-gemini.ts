@@ -1,12 +1,12 @@
 /**
- * Test Gemini API Integration
- * Run with: npx tsx server/ai/test-gemini.ts
+ * Test Claude API Integration
+ * Run with: npx tsx server/ai/test-claude.ts
  */
 
 import { specParserAgent } from "./agents/specParser";
 
-async function testGeminiIntegration() {
-  console.log("🧪 Testing Gemini API Integration...\n");
+async function testClaudeIntegration() {
+  console.log("🧪 Testing Claude API Integration...\n");
 
   // Test specification
   const testSpec = {
@@ -21,7 +21,7 @@ async function testGeminiIntegration() {
 
   console.log("📋 Test Specification:");
   console.log(JSON.stringify(testSpec, null, 2));
-  console.log("\n⏳ Calling SpecParser agent with Gemini...\n");
+  console.log("\n⏳ Calling SpecParser agent with Claude...\n");
 
   try {
     const result = await specParserAgent(testSpec);
@@ -31,17 +31,17 @@ async function testGeminiIntegration() {
     console.log(JSON.stringify(result, null, 2));
 
     if (result.success) {
-      console.log("\n✅ SpecParser agent works with Gemini API!");
+      console.log("\n✅ SpecParser agent works with Claude API!");
       console.log("Validated specification:", result.data.validatedSpec);
     } else {
       console.log("\n❌ SpecParser validation failed");
       console.log("Errors:", result.errors);
     }
   } catch (error) {
-    console.error("\n❌ Error testing Gemini API:");
+    console.error("\n❌ Error testing Claude API:");
     console.error(error);
     process.exit(1);
   }
 }
 
-testGeminiIntegration();
+testClaudeIntegration();

@@ -19,7 +19,7 @@ export const client = new Anthropic({
  * @param prompt The full prompt including context and user input
  * @returns Parsed JSON response from Claude
  */
-export async function callGemini(prompt: string): Promise<any> {
+export async function callClaude(prompt: string): Promise<any> {
   try {
     console.log(`[Claude] Calling API with prompt length: ${prompt.length}`);
 
@@ -64,11 +64,11 @@ export async function callGemini(prompt: string): Promise<any> {
 /**
  * Test the Claude connection
  */
-export async function testGeminiConnection(): Promise<void> {
+export async function testClaudeConnection(): Promise<void> {
   try {
     console.log("[Claude] Testing connection...");
     const testPrompt = "Return this JSON: {\"success\": true, \"test\": \"connection\"}";
-    const result = await callGemini(testPrompt);
+    const result = await callClaude(testPrompt);
 
     if (result.success) {
       console.log("[Claude] ✓ Connection successful");
@@ -79,4 +79,4 @@ export async function testGeminiConnection(): Promise<void> {
   }
 }
 
-export default { client, callGemini, testGeminiConnection };
+export default { client, callClaude, testClaudeConnection };

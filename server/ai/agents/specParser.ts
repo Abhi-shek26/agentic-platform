@@ -1,5 +1,5 @@
 import { AgentOutput } from "@shared/types";
-import { callGemini } from "../client";
+import { callClaude } from "../client";
 import { SPEC_PARSER_PROMPT, createPrompt } from "../prompts";
 import { createMockSpecParserResponse } from "../mock-agents";
 
@@ -23,7 +23,7 @@ export async function specParserAgent(
     const prompt = createPrompt(SPEC_PARSER_PROMPT, specification);
 
     // Call Claude API
-    const parsedResponse = await callGemini(prompt);
+    const parsedResponse = await callClaude(prompt);
 
     // Validate response structure
     if (!parsedResponse.success) {

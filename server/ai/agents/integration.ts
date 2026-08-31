@@ -1,12 +1,12 @@
 import { AgentOutput } from "@shared/types";
-import { model } from "../client";
+import { callClaude } from "../client";
 import { INTEGRATION_PROMPT, createPrompt } from "../prompts";
 import { createMockIntegrationResponse } from "../mock-agents";
 
 /**
  * Integration Agent
  * Sets up external API integrations and configurations
- * Uses Gemini 2.0 Flash for fast, free integration setup
+ * Uses Claude API for fast, reliable integration setup
  */
 export async function integrationAgent(
   spec: any
@@ -21,27 +21,8 @@ export async function integrationAgent(
     // Create the full prompt with specification
     const prompt = createPrompt(INTEGRATION_PROMPT, spec);
 
-    // Call Gemini API
-    const result = await model.generateContent([{ text: prompt }]);
-    const responseText = result.response.text();
-
-    // Parse JSON response
-    let parsedResponse;
-    try {
-      // Extract JSON from response (in case there's markdown formatting)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
-      parsedResponse = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      return {
-        success: false,
-        data: {},
-        errors: ["Failed to parse integration setup response"],
-      };
-    }
+    // Call Claude API
+    const parsedResponse = await callClaude(prompt);
 
     // Validate response structure
     if (!parsedResponse.success) {
