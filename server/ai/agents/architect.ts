@@ -1,12 +1,12 @@
 import { AgentOutput } from "@shared/types";
-import { model } from "../client";
+import { callGemini } from "../client";
 import { ARCHITECT_PROMPT, createPrompt } from "../prompts";
 import { createMockArchitectResponse } from "../mock-agents";
 
 /**
  * Architect Agent
  * Designs the project structure, folder layout, and component hierarchy
- * Uses Gemini 2.0 Flash for fast, free design generation
+ * Uses Claude API for design generation
  */
 export async function architectAgent(
   spec: any
@@ -21,23 +21,8 @@ export async function architectAgent(
     // Create the full prompt with specification
     const prompt = createPrompt(ARCHITECT_PROMPT, spec);
 
-    // Call Gemini API
-    const result = await model.generateContent([{ text: prompt }]);
-    const responseText = result.response.text();
-
-    // Parse JSON response
-    let parsedResponse;
-    try {
-      // Extract JSON from response (in case there's markdown formatting)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
-      parsedResponse = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      return {
-        success: false,
+    // Call Claude API
+    const parsedResponse = await callGemini(prompt);
         data: {},
         errors: ["Failed to parse architecture design response"],
       };

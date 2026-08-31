@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { listProjects } from '../lib/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { listProjects, getCodeInfo, downloadCode } from '../lib/api';
 
 interface Project {
   id: string;
@@ -12,9 +12,100 @@ interface Project {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const data = await listProjects();
+        if (data.error) {
+          setError(data.error);
+          return;
+        }
+        setProjects(data.projects || []);
+        setError(null);
+      } catch (err) {
+        setError(`Failed to fetch projects: ${err}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  const handleDownload = async (projectId: string, projectName: string) => {
+    try {
+      setDownloadingId(projectId);
+      const res = await downloadCode(projectId);
+
+      if (!res.ok) {
+        alert(`Download failed: ${res.statusText}`);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${projectName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(`Download error: ${err}`);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleView = async (projectId: string) => {
+    try {
+      const data = await getCodeInfo(projectId);
+      if (data.error) {
+        alert(`Error: ${data.error}`);
+        return;
+      }
+
+      // Open code preview in new window
+      const preview = window.open('', '_blank');
+      if (preview) {
+        preview.document.write(`
+          <html>
+          <head>
+            <title>Project Code Preview</title>
+            <style>
+              body { font-family: monospace; margin: 20px; background: #f5f5f5; }
+              h2 { color: #333; }
+              .file { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }
+              .stats { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }
+            </style>
+          </head>
+          <body>
+            <h1>Code Preview</h1>
+            <div class="stats">
+              <h2>Project Stats</h2>
+              <p><strong>Total Files:</strong> ${data.totalFiles || 0}</p>
+              <p><strong>Total Lines:</strong> ${data.totalLines || 0}</p>
+              <p><strong>Languages:</strong> ${data.languages?.join(', ') || 'N/A'}</p>
+            </div>
+            <div class="file">
+              <h2>Files Generated:</h2>
+              <pre>${JSON.stringify(data.files || [], null, 2)}</pre>
+            </div>
+          </body>
+          </html>
+        `);
+      }
+    } catch (err) {
+      alert(`View error: ${err}`);
+    }
+  };
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -156,15 +247,15 @@ export default function Dashboard() {
 
                   {project.status === 'generated' && (
                     <>
-                      <a
-                        href={`http://localhost:5000/api/projects/${project.id}/code`}
-                        download
-                        className="flex-1 bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm text-center"
-                      >
-                        Download
-                      </a>
                       <button
-                        onClick={() => window.open(`http://localhost:5000/projects/${project.id}`, '_blank')}
+                        onClick={() => handleDownload(project.id, project.name)}
+                        disabled={downloadingId === project.id}
+                        className="flex-1 bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {downloadingId === project.id ? 'Downloading...' : 'Download'}
+                      </button>
+                      <button
+                        onClick={() => handleView(project.id)}
                         className="flex-1 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
                       >
                         View

@@ -1,5 +1,5 @@
 import { AgentOutput } from "@shared/types";
-import { model } from "../client";
+import { callGemini } from "../client";
 import { BACKEND_PROMPT, createPrompt } from "../prompts";
 import { createMockBackendResponse } from "../mock-agents";
 
@@ -23,23 +23,8 @@ export async function backendAgent(
     const fullSpec = { specification: spec, architecture };
     const prompt = createPrompt(BACKEND_PROMPT, fullSpec);
 
-    // Call Gemini API
-    const result = await model.generateContent([{ text: prompt }]);
-    const responseText = result.response.text();
-
-    // Parse JSON response
-    let parsedResponse;
-    try {
-      // Extract JSON from response (in case there's markdown formatting)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
-      parsedResponse = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      return {
-        success: false,
+    // Call Claude API
+    const parsedResponse = await callGemini(prompt);
         data: {},
         errors: ["Failed to parse backend code generation response"],
       };

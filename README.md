@@ -138,10 +138,11 @@ agentic-platform/
 
 4. **Start Development Server**
    ```bash
-   npm run dev
+   npm run dev:full
    ```
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:5000
+   - Redis/Postgres: started automatically via Docker Compose
 
 ## 📦 Tech Stack
 

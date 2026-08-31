@@ -1,87 +1,82 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 import { config } from "dotenv";
 
 // Load environment variables
 config();
 
-if (!process.env.GEMINI_API_KEY) {
+if (!process.env.ANTHROPIC_API_KEY) {
   throw new Error(
-    "GEMINI_API_KEY environment variable is not set. Get a free API key from https://ai.google.dev/"
+    "ANTHROPIC_API_KEY environment variable is not set. Get a free API key from https://console.anthropic.com"
   );
 }
 
-export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-/**
- * Gemini 2.0 Flash model - optimized for fast code generation
- * This is the latest and fastest Gemini model
- */
-export const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
-  generationConfig: {
-    temperature: 0.7,
-    topP: 0.95,
-    topK: 40,
-  },
+export const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 /**
- * Call Gemini API with a prompt and return parsed JSON response
+ * Call Claude API with a prompt and return parsed JSON response
  * @param prompt The full prompt including context and user input
- * @returns Parsed JSON response from Gemini
+ * @returns Parsed JSON response from Claude
  */
 export async function callGemini(prompt: string): Promise<any> {
   try {
-    console.log(`[Gemini] Calling API with prompt length: ${prompt.length}`);
+    console.log(`[Claude] Calling API with prompt length: ${prompt.length}`);
 
-    const result = await model.generateContent([
-      {
-        text: prompt,
-      },
-    ]);
+    const message = await client.messages.create({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
 
-    if (!result.response) {
-      throw new Error("No response from Gemini");
+    if (!message.content || message.content.length === 0) {
+      throw new Error("No response from Claude");
     }
 
-    const responseText = result.response.text();
-    console.log(`[Gemini] Received response (${responseText.length} chars)`);
+    const responseText =
+      message.content[0].type === "text" ? message.content[0].text : "";
+    console.log(`[Claude] Received response (${responseText.length} chars)`);
 
     // Extract JSON from the response (handles markdown code blocks)
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error("[Gemini] Response text:", responseText.substring(0, 500));
-      throw new Error("No JSON found in Gemini response");
+      console.error("[Claude] Response text:", responseText.substring(0, 500));
+      throw new Error("No JSON found in Claude response");
     }
 
     const parsedResponse = JSON.parse(jsonMatch[0]);
-    console.log("[Gemini] ✓ Successfully parsed response");
+    console.log("[Claude] ✓ Successfully parsed response");
 
     return parsedResponse;
   } catch (error) {
     if (error instanceof Error) {
-      console.error(`[Gemini] Error: ${error.message}`);
+      console.error(`[Claude] Error: ${error.message}`);
     }
     throw error;
   }
 }
 
 /**
- * Test the Gemini connection
+ * Test the Claude connection
  */
 export async function testGeminiConnection(): Promise<void> {
   try {
-    console.log("[Gemini] Testing connection...");
+    console.log("[Claude] Testing connection...");
     const testPrompt = "Return this JSON: {\"success\": true, \"test\": \"connection\"}";
     const result = await callGemini(testPrompt);
 
     if (result.success) {
-      console.log("[Gemini] ✓ Connection successful");
+      console.log("[Claude] ✓ Connection successful");
     }
   } catch (error) {
-    console.error("[Gemini] ✗ Connection test failed:", error);
+    console.error("[Claude] ✗ Connection test failed:", error);
     throw error;
   }
 }
 
-export default { genAI, model, callGemini, testGeminiConnection };
+export default { client, callGemini, testGeminiConnection };

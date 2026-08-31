@@ -1,12 +1,12 @@
 import { AgentOutput } from "@shared/types";
-import { model } from "../client";
+import { callGemini } from "../client";
 import { SPEC_PARSER_PROMPT, createPrompt } from "../prompts";
 import { createMockSpecParserResponse } from "../mock-agents";
 
 /**
  * Specification Parser Agent
  * Validates user input and structures it for code generation
- * Uses Gemini 2.0 Flash model for fast, free processing
+ * Uses Claude API for processing
  * Can use mock responses for testing (set MOCK_AGENTS=true in .env)
  */
 export async function specParserAgent(
@@ -22,27 +22,8 @@ export async function specParserAgent(
     // Create the full prompt with user specification
     const prompt = createPrompt(SPEC_PARSER_PROMPT, specification);
 
-    // Call Gemini API
-    const result = await model.generateContent([{ text: prompt }]);
-    const responseText = result.response.text();
-
-    // Parse JSON response
-    let parsedResponse;
-    try {
-      // Extract JSON from response (in case there's markdown formatting)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
-      parsedResponse = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("Failed to parse Gemini response:", responseText);
-      return {
-        success: false,
-        data: {},
-        errors: ["Failed to parse specification validation response"],
-      };
-    }
+    // Call Claude API
+    const parsedResponse = await callGemini(prompt);
 
     // Validate response structure
     if (!parsedResponse.success) {

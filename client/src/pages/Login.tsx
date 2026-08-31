@@ -4,6 +4,8 @@ interface LoginProps {
   onSuccess: (token: string) => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Login({ onSuccess }: LoginProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -12,10 +14,18 @@ export default function Login({ onSuccess }: LoginProps) {
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleToggleMode = () => {
+    setIsSignUp(!isSignUp);
+    setError(null);
+    setSuccess(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
     try {
@@ -24,7 +34,7 @@ export default function Login({ onSuccess }: LoginProps) {
         ? { email, username, password, displayName }
         : { email, password };
 
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -37,12 +47,22 @@ export default function Login({ onSuccess }: LoginProps) {
         return;
       }
 
-      if (data.token) {
-        localStorage.setItem('authToken', data.token);
+      if (!data.token) {
+        setError('No authentication token received. Please try again.');
+        return;
+      }
+
+      localStorage.setItem('authToken', data.token);
+
+      if (isSignUp) {
+        setSuccess('Account created successfully! Logging in...');
+        setTimeout(() => onSuccess(data.token), 500);
+      } else {
         onSuccess(data.token);
       }
     } catch (err) {
-      setError(`Error: ${err}`);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setError(`Connection error: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -58,10 +78,20 @@ export default function Login({ onSuccess }: LoginProps) {
           AI-powered tournament website builder
         </p>
 
+        <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700 text-center">
+          {isSignUp ? 'Create a new account' : 'Sign in to your account'}
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
               {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+              {success}
             </div>
           )}
 
@@ -76,6 +106,7 @@ export default function Login({ onSuccess }: LoginProps) {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
               placeholder="your@email.com"
               required
+              disabled={loading}
             />
           </div>
 
@@ -92,12 +123,13 @@ export default function Login({ onSuccess }: LoginProps) {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
                   placeholder="username"
                   required
+                  disabled={loading}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Display Name
+                  Display Name (optional)
                 </label>
                 <input
                   type="text"
@@ -105,6 +137,7 @@ export default function Login({ onSuccess }: LoginProps) {
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
                   placeholder="Your Name"
+                  disabled={loading}
                 />
               </div>
             </>
@@ -112,7 +145,7 @@ export default function Login({ onSuccess }: LoginProps) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password (min 8 chars, uppercase, lowercase, number)
+              Password {!isSignUp && ''}
             </label>
             <input
               type="password"
@@ -121,7 +154,11 @@ export default function Login({ onSuccess }: LoginProps) {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent"
               placeholder="••••••••"
               required
+              disabled={loading}
             />
+            {isSignUp && (
+              <p className="text-xs text-gray-500 mt-1">Min 8 chars, uppercase, lowercase, number</p>
+            )}
           </div>
 
           <button
@@ -136,8 +173,9 @@ export default function Login({ onSuccess }: LoginProps) {
         <div className="mt-6 text-center">
           <button
             type="button"
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-blue-600 hover:text-blue-700 font-medium"
+            onClick={handleToggleMode}
+            disabled={loading}
+            className="text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSignUp ? 'Already have an account? Login' : 'Need an account? Sign Up'}
           </button>

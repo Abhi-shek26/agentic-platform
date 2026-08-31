@@ -10,11 +10,33 @@ import { storage } from "../storage";
  * Handles job persistence, retries, progress tracking, and code assembly
  */
 
-export const generateQueue = new Bull("generation", {
-  redis: {
+function createRedisConfig() {
+  const redisUrl = process.env.REDIS_URL;
+
+  if (redisUrl) {
+    const parsedUrl = new URL(redisUrl);
+
+    return {
+      host: parsedUrl.hostname,
+      port: Number(parsedUrl.port || 6379),
+      username: parsedUrl.username || undefined,
+      password: parsedUrl.password || undefined,
+      db: parsedUrl.pathname ? Number(parsedUrl.pathname.replace("/", "")) || 0 : 0,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
+  }
+
+  return {
     host: "localhost",
     port: 6379,
-  },
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  };
+}
+
+export const generateQueue = new Bull("generation", {
+  redis: createRedisConfig(),
   defaultJobOptions: {
     attempts: 2,
     backoff: {

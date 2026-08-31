@@ -28,32 +28,55 @@ const tokenToUser = new Map<string, any>();
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   // Check session first (for browser-based requests)
   if (req.user) {
-    console.log(`[DEBUG] Auth via session - User ID: ${(req.user as any).id}`);
+    console.log(`[AUTH] ✓ Session auth - User ID: ${(req.user as any).id}`);
     return next();
   }
 
   // Check Bearer token (for API requests)
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.substring(7);
-    const user = tokenToUser.get(token);
-    console.log(`[DEBUG] Token lookup - Token: ${token.substring(0, 10)}..., Found: ${!!user}, Total in map: ${tokenToUser.size}`);
-    if (user) {
-      console.log(`[DEBUG] Auth via token - User ID: ${user.id}`);
-      req.user = user;
-      return next();
-    } else {
-      console.warn(`Token not found in mapping: ${token.substring(0, 10)}...`);
-      console.warn(`Available tokens: ${Array.from(tokenToUser.keys()).map(t => t.substring(0, 10) + '...').join(', ')}`);
-    }
+  if (!authHeader) {
+    console.warn("[AUTH] ✗ No authorization header");
+    return res.status(401).json({ error: "Unauthorized - No token provided" });
   }
 
-  return res.status(401).json({ error: "Unauthorized" });
+  if (!authHeader.startsWith("Bearer ")) {
+    console.warn("[AUTH] ✗ Invalid authorization header format");
+    return res.status(401).json({ error: "Unauthorized - Invalid token format" });
+  }
+
+  const token = authHeader.substring(7);
+  const user = tokenToUser.get(token);
+
+  if (!user) {
+    console.warn(`[AUTH] ✗ Token not found in mapping`);
+    console.warn(`     Token (first 20 chars): ${token.substring(0, 20)}...`);
+    console.warn(`     Tokens in map: ${tokenToUser.size}`);
+    console.warn(`     Available token keys: ${Array.from(tokenToUser.keys()).map(t => t.substring(0, 10) + '...').join(', ')}`);
+    return res.status(401).json({ error: "Unauthorized - Invalid or expired token" });
+  }
+
+  console.log(`[AUTH] ✓ Token auth - User ID: ${user.id}`);
+  req.user = user;
+  return next();
 }
 
-// ============================================================
-// AUTHENTICATION ROUTES
-// ============================================================
+/**
+ * GET /api/auth/debug
+ * Debug endpoint - DO NOT use in production
+ */
+router.get("/auth/debug", (req: Request, res: Response) => {
+  const tokenCount = tokenToUser.size;
+  const tokens = Array.from(tokenToUser.entries()).map(([key, value]) => ({
+    token: key.substring(0, 20) + '...',
+    user: value.email,
+  }));
+
+  res.json({
+    tokensInMap: tokenCount,
+    tokens,
+    authHeader: req.headers.authorization ? "Present" : "Missing",
+  });
+});
 
 /**
  * POST /api/auth/signup
@@ -63,18 +86,23 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   try {
     const { email, username, password, displayName } = req.body;
 
+    console.log(`[AUTH] Signup attempt - Email: ${email}, Username: ${username}`);
+
     // Validate inputs
     if (!email || !username || !password) {
+      console.warn("[AUTH] Signup failed - Missing required fields");
       return res.status(400).json({
         error: "Email, username, and password are required",
       });
     }
 
     if (!validateEmail(email)) {
+      console.warn(`[AUTH] Signup failed - Invalid email: ${email}`);
       return res.status(400).json({ error: "Invalid email format" });
     }
 
     if (!validateUsername(username)) {
+      console.warn(`[AUTH] Signup failed - Invalid username: ${username}`);
       return res.status(400).json({
         error: "Username must be 3-20 characters, alphanumeric and underscore only",
       });
@@ -82,6 +110,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
 
     const passwordValidation = validatePasswordStrength(password);
     if (!passwordValidation.valid) {
+      console.warn(`[AUTH] Signup failed - Weak password`);
       return res.status(400).json({
         error: "Password requirements not met",
         details: passwordValidation.errors,
@@ -91,11 +120,13 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     // Check if user already exists
     const existingUser = await storage.getUserByEmail(email);
     if (existingUser) {
+      console.warn(`[AUTH] Signup failed - Email already registered: ${email}`);
       return res.status(409).json({ error: "Email already registered" });
     }
 
     const existingUsername = await storage.getUserByUsername(username);
     if (existingUsername) {
+      console.warn(`[AUTH] Signup failed - Username taken: ${username}`);
       return res.status(409).json({ error: "Username already taken" });
     }
 
@@ -107,41 +138,37 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       email,
       username,
       password: hashedPassword,
-      displayName,
+      displayName: displayName || username,
     });
 
-    // Set session
-    req.login(user, (err) => {
-      if (err) {
-        return res.status(500).json({ error: "Failed to create session" });
-      }
+    console.log(`[AUTH] ✓ User created - ID: ${user.id}, Email: ${email}`);
 
-      // Generate auth token for API access
-      const token = generateAuthToken();
+    // Generate auth token for API access
+    const token = generateAuthToken();
+    console.log(`[AUTH] Token generated for signup - Token: ${token.substring(0, 10)}...`);
 
-      // Store token-to-user mapping for API authentication
-      tokenToUser.set(token, {
+    // Store token-to-user mapping for API authentication
+    tokenToUser.set(token, {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
+    });
+
+    console.log(`[AUTH] Token stored in map - Total tokens: ${tokenToUser.size}`);
+
+    return res.status(201).json({
+      success: true,
+      user: {
         id: user.id,
         email: user.email,
         username: user.username,
         displayName: user.displayName,
-      });
-
-      console.log(`✓ User signup, token generated: ${token.substring(0, 10)}...`);
-      console.log(`  Total tokens in map: ${tokenToUser.size}`);
-
-      return res.status(201).json({
-        user: {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          displayName: user.displayName,
-        },
-        token,
-      });
+      },
+      token,
     });
   } catch (error) {
-    console.error("Signup error:", error);
+    console.error("[AUTH] Signup error:", error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Signup failed",
     });
@@ -156,7 +183,10 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
+    console.log(`[AUTH] Login attempt - Email: ${email}`);
+
     if (!email || !password) {
+      console.warn("[AUTH] Login failed - Missing email or password");
       return res.status(400).json({
         error: "Email and password are required",
       });
@@ -165,10 +195,12 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     // Get user by email
     const user = await storage.getUserByEmail(email);
     if (!user) {
+      console.warn(`[AUTH] Login failed - User not found: ${email}`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     if (!user.password) {
+      console.warn(`[AUTH] Login failed - No password set for user: ${email}`);
       return res.status(401).json({
         error: "This account uses OAuth. Please sign in with OAuth provider.",
       });
@@ -177,11 +209,13 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     // Verify password
     const isPasswordValid = await verifyPassword(password, user.password);
     if (!isPasswordValid) {
+      console.warn(`[AUTH] Login failed - Invalid password for user: ${email}`);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     // Generate auth token for API access
     const token = generateAuthToken();
+    console.log(`[AUTH] ✓ Login successful - User: ${user.id}, Token: ${token.substring(0, 10)}...`);
 
     // Store token-to-user mapping
     tokenToUser.set(token, {
@@ -191,20 +225,23 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       displayName: user.displayName,
     });
 
+    console.log(`[AUTH] Token stored in map - Total tokens: ${tokenToUser.size}`);
+
     // ✅ RETURN TOKEN IN LOGIN RESPONSE
     const response = {
+      success: true,
       user: {
         id: user.id,
         email: user.email,
         username: user.username,
         displayName: user.displayName,
       },
-      token: token,  // ← TOKEN EXPLICITLY RETURNED HERE
+      token: token,
     };
 
     return res.status(200).json(response);
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("[AUTH] Login error:", error);
     res.status(500).json({
       error: error instanceof Error ? error.message : "Login failed",
     });

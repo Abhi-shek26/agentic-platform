@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "dev:client": "vite --port 5173",
-    "dev:full": "concurrently \"npm run dev\" \"npm run dev:client\"",
+    "dev:services": "docker compose up -d postgres redis",
+    "dev:full": "npm run dev:services && concurrently \"npm run dev\" \"npm run dev:client\"",
     "build": "tsx script/build.ts",
     "build:client": "vite build",
     "build:server": "esbuild server/index.ts --bundle --platform=node --outfile=dist/index.cjs",
@@ -23,7 +24,7 @@
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "db:generate": "drizzle-kit generate --config drizzle.config.ts",
     "docker:build": "docker build -t agentic-platform:latest .",
-    "docker:run": "docker run -p 5000:5000 agentic-platform:latest"
+    "docker:run": "docker run -p 5000:5000 --env-file .env agentic-platform:latest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",

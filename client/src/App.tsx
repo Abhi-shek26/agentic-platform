@@ -14,15 +14,51 @@ function App() {
     // Check if user is already logged in
     const token = localStorage.getItem('authToken');
     if (token) {
-      setAuthToken(token);
+      // Verify token is valid by making a test request
+      fetch('http://localhost:5000/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+        .then(res => {
+          if (res.ok) {
+            setAuthToken(token);
+          } else if (res.status === 401) {
+            // Token is invalid, clear it
+            localStorage.removeItem('authToken');
+            setAuthToken(null);
+          }
+        })
+        .catch(err => {
+          console.error("Token verification failed:", err);
+          localStorage.removeItem('authToken');
+          setAuthToken(null);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     setAuthToken(null);
   };
+
+  // Setup global error handler for 401 responses
+  useEffect(() => {
+    const handleUnauthorized = (event: Event) => {
+      const detail = (event as any).detail;
+      if (detail?.status === 401) {
+        console.log("[AUTH] Received 401 - Redirecting to login");
+        localStorage.removeItem('authToken');
+        setAuthToken(null);
+      }
+    };
+
+    window.addEventListener('api:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('api:unauthorized', handleUnauthorized);
+  }, []);
 
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
