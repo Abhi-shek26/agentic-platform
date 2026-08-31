@@ -25,10 +25,6 @@ export async function backendAgent(
 
     // Call Claude API
     const parsedResponse = await callClaude(prompt);
-        data: {},
-        errors: ["Failed to parse backend code generation response"],
-      };
-    }
 
     // Validate response structure
     if (!parsedResponse.success) {

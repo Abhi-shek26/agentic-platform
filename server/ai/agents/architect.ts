@@ -23,10 +23,6 @@ export async function architectAgent(
 
     // Call Claude API
     const parsedResponse = await callClaude(prompt);
-        data: {},
-        errors: ["Failed to parse architecture design response"],
-      };
-    }
 
     // Validate response structure
     if (!parsedResponse.success) {
