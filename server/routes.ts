@@ -6,26 +6,30 @@ import {
   validateEmail,
   validateUsername,
   validatePassword as validatePasswordStrength,
-  generateAuthToken,
+  signSessionToken,
+  verifySessionToken,
 } from "./utils/auth";
 import { queueGenerationJob, getJobStatus } from "./queue/jobQueue";
 import { GenerationProgressTracker } from "./utils/progressEmitter";
 import { CodeDownloader } from "./utils/codeDownloader";
 import { CodePreview } from "./utils/codePreview";
+import { deployToVercel } from "./deployment/vercelDeploy";
+import * as fs from "fs";
+import * as path from "path";
 
 const router = Router();
-
-// Token to user mapping for API authentication (development)
-const tokenToUser = new Map<string, any>();
 
 // ============================================================
 // MIDDLEWARE
 // ============================================================
 
 /**
- * Middleware to check if user is authenticated
+ * Middleware to check if user is authenticated.
+ * Sessions are stateless HMAC-signed tokens (userId + expiry) verified
+ * against SESSION_SECRET and resolved via persistent storage — they survive
+ * container restarts, unlike the old in-memory token map.
  */
-function requireAuth(req: Request, res: Response, next: NextFunction) {
+async function requireAuth(req: Request, res: Response, next: NextFunction) {
   // Check session first (for browser-based requests)
   if (req.user) {
     console.log(`[AUTH] ✓ Session auth - User ID: ${(req.user as any).id}`);
@@ -45,19 +49,26 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 
   const token = authHeader.substring(7);
-  const user = tokenToUser.get(token);
+  const session = verifySessionToken(token);
 
-  if (!user) {
-    console.warn(`[AUTH] ✗ Token not found in mapping`);
-    console.warn(`     Token (first 20 chars): ${token.substring(0, 20)}...`);
-    console.warn(`     Tokens in map: ${tokenToUser.size}`);
-    console.warn(`     Available token keys: ${Array.from(tokenToUser.keys()).map(t => t.substring(0, 10) + '...').join(', ')}`);
+  if (!session) {
+    console.warn(`[AUTH] ✗ Invalid or expired token`);
     return res.status(401).json({ error: "Unauthorized - Invalid or expired token" });
   }
 
-  console.log(`[AUTH] ✓ Token auth - User ID: ${user.id}`);
-  req.user = user;
-  return next();
+  try {
+    const user = await storage.getUser(session.userId);
+    if (!user) {
+      console.warn(`[AUTH] ✗ Token user not found: ${session.userId}`);
+      return res.status(401).json({ error: "Unauthorized - Invalid or expired token" });
+    }
+    console.log(`[AUTH] ✓ Token auth - User ID: ${user.id}`);
+    req.user = user;
+    return next();
+  } catch (error) {
+    console.error("[AUTH] Token auth error:", error);
+    return res.status(500).json({ error: "Authentication failed" });
+  }
 }
 
 /**
@@ -65,15 +76,8 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
  * Debug endpoint - DO NOT use in production
  */
 router.get("/auth/debug", (req: Request, res: Response) => {
-  const tokenCount = tokenToUser.size;
-  const tokens = Array.from(tokenToUser.entries()).map(([key, value]) => ({
-    token: key.substring(0, 20) + '...',
-    user: value.email,
-  }));
-
   res.json({
-    tokensInMap: tokenCount,
-    tokens,
+    sessions: "stateless HMAC tokens (no server-side map)",
     authHeader: req.headers.authorization ? "Present" : "Missing",
   });
 });
@@ -133,7 +137,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create user
+    // Create user (email normalized to lowercase at the storage boundary)
     const user = await storage.createUser({
       email,
       username,
@@ -143,19 +147,9 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
 
     console.log(`[AUTH] ✓ User created - ID: ${user.id}, Email: ${email}`);
 
-    // Generate auth token for API access
-    const token = generateAuthToken();
-    console.log(`[AUTH] Token generated for signup - Token: ${token.substring(0, 10)}...`);
-
-    // Store token-to-user mapping for API authentication
-    tokenToUser.set(token, {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName,
-    });
-
-    console.log(`[AUTH] Token stored in map - Total tokens: ${tokenToUser.size}`);
+    // Stateless session token (survives restarts)
+    const token = signSessionToken(user.id);
+    console.log(`[AUTH] Token issued for signup - Token: ${token.substring(0, 10)}...`);
 
     return res.status(201).json({
       success: true,
@@ -213,19 +207,9 @@ router.post("/auth/login", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate auth token for API access
-    const token = generateAuthToken();
+    // Generate stateless session token
+    const token = signSessionToken(user.id);
     console.log(`[AUTH] ✓ Login successful - User: ${user.id}, Token: ${token.substring(0, 10)}...`);
-
-    // Store token-to-user mapping
-    tokenToUser.set(token, {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName,
-    });
-
-    console.log(`[AUTH] Token stored in map - Total tokens: ${tokenToUser.size}`);
 
     // ✅ RETURN TOKEN IN LOGIN RESPONSE
     const response = {
@@ -446,14 +430,13 @@ router.post(
 
       // Check generation quota
       const currentUser = await storage.getUser(user.id);
-      if (
-        currentUser &&
-        currentUser.generationUsed >= currentUser.generationQuota
-      ) {
+      const used = currentUser?.generationUsed ?? 0;
+      const quota = currentUser?.generationQuota ?? 5;
+      if (currentUser && used >= quota) {
         return res.status(429).json({
           error: "Generation quota exceeded",
-          used: currentUser.generationUsed,
-          quota: currentUser.generationQuota,
+          used,
+          quota,
         });
       }
 
@@ -712,24 +695,142 @@ router.get(
 
 /**
  * POST /api/projects/:id/deploy-platform
- * Deploy generated website to platform hosting
+ * Publish the generated site on local platform hosting (/sites/:id).
+ * Instant: serves the pre-built preview page, no build step.
  */
 router.post(
   "/projects/:id/deploy-platform",
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      const projectId = req.params.id;
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.status !== "generated" && project.status !== "deployed") {
+        return res.status(400).json({
+          error: "Generate the project before deploying",
+          status: project.status,
+        });
+      }
 
-      // TODO: Deploy generated code to platform
-      res.status(202).json({
-        message: "Deployment started",
-        deploymentId: `deploy-${projectId}`,
-        status: "building",
+      const siteUrl = `/sites/${project.id}`;
+      await storage.updateProject(project.id, {
+        status: "deployed",
+        deploymentStatus: "live",
+        hostedUrl: siteUrl,
+      } as any);
+
+      res.status(200).json({
+        message: "Site is live on platform hosting",
+        siteUrl,
+        deploymentStatus: "live",
       });
     } catch (error) {
       res.status(500).json({
         error: error instanceof Error ? error.message : "Failed to deploy",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/projects/:id/site
+ * Hosting info for a project (ready flag + URLs).
+ */
+router.get(
+  "/projects/:id/site",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const previewPath = project.generatedCodePath
+        ? path.join(project.generatedCodePath as string, "preview", "index.html")
+        : null;
+      const ready =
+        (project.status === "generated" || project.status === "deployed") &&
+        !!previewPath &&
+        fs.existsSync(previewPath);
+      res.status(200).json({
+        ready,
+        siteUrl: ready ? `/sites/${project.id}` : null,
+        hostedUrl: (project as any).hostedUrl ?? null,
+        deploymentStatus: project.deploymentStatus ?? "pending",
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to get site info",
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/projects/:id/deploy-vercel
+ * One-click deploy to Vercel (public URL). Needs VERCEL_TOKEN in env
+ * or { vercelToken } in body. Free tier compatible.
+ */
+router.post(
+  "/projects/:id/deploy-vercel",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.status !== "generated" && project.status !== "deployed") {
+        return res.status(400).json({
+          error: "Generate the project before deploying",
+          status: project.status,
+        });
+      }
+      const generatedCodePath = (project as any).generatedCodePath as string | undefined;
+      if (!generatedCodePath || !fs.existsSync(generatedCodePath)) {
+        return res.status(404).json({ error: "Generated code not found" });
+      }
+
+      const token = (req.body?.vercelToken as string | undefined)?.trim()
+        || process.env.VERCEL_TOKEN?.trim();
+      if (!token) {
+        return res.status(400).json({
+          error: "Vercel token required (set VERCEL_TOKEN or pass vercelToken)",
+        });
+      }
+
+      // Best-effort: ensure the honest-preview build exists so Vercel gets
+      // the real app. Failures fall back to the static placeholder inside
+      // deployToVercel — deploys never break because of the build.
+      try {
+        const { ensureBuilt } = await import("./utils/siteBuilder");
+        await ensureBuilt(project.id);
+      } catch (err) {
+        console.warn("[Deploy] Preview build failed, deploying fallback:", err instanceof Error ? err.message : err);
+      }
+
+      const result = await deployToVercel(generatedCodePath, project.name, token);
+      if (!result.success) {
+        await storage.updateProject(project.id, { deploymentStatus: "failed" } as any);
+        return res.status(502).json({ error: result.error || "Vercel deploy failed" });
+      }
+
+      await storage.updateProject(project.id, {
+        deploymentStatus: "live",
+        hostedUrl: result.url,
+      } as any);
+
+      res.status(200).json({
+        message: "Deployed to Vercel",
+        url: result.url,
+        deploymentId: result.deploymentId,
+        deploymentStatus: "live",
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to deploy to Vercel",
       });
     }
   }

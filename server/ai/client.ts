@@ -1,25 +1,43 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "dotenv";
+import { callQubrid } from "./qubrid-client";
 
 // Load environment variables
 config();
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  throw new Error(
-    "ANTHROPIC_API_KEY environment variable is not set. Get a free API key from https://console.anthropic.com"
-  );
-}
+const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
 
-export const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+export const client = anthropicKey
+  ? new Anthropic({ apiKey: anthropicKey })
+  : null;
 
 /**
- * Call Claude API with a prompt and return parsed JSON response
- * @param prompt The full prompt including context and user input
- * @returns Parsed JSON response from Claude
+ * Call LLM with a prompt and return parsed JSON response.
+ * Credit-safe routing:
+ *  1. Qubrid (DeepSeek etc.) if QUBRID_API_KEY is set — preferred, cheap.
+ *  2. Claude if ANTHROPIC_API_KEY is set.
+ * Agents import this as callClaude so no agent rewrites are needed.
  */
-export async function callClaude(prompt: string): Promise<any> {
+export async function callClaude(
+  prompt: string,
+  opts: { maxTokens?: number; temperature?: number; model?: string } = {}
+): Promise<any> {
+  if (process.env.QUBRID_API_KEY?.trim()) {
+    const envCap = Number(process.env.QUBRID_MAX_TOKENS ?? 0);
+    return callQubrid(
+      prompt,
+      opts.maxTokens ?? (envCap > 0 ? envCap : 16000),
+      opts.temperature ?? 0.7,
+      opts.model
+    );
+  }
+
+  if (!client) {
+    throw new Error(
+      "No LLM key set. Set QUBRID_API_KEY (preferred) or ANTHROPIC_API_KEY."
+    );
+  }
+
   try {
     console.log(`[Claude] Calling API with prompt length: ${prompt.length}`);
 

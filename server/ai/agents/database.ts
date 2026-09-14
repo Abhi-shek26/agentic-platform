@@ -1,6 +1,7 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { DATABASE_PROMPT, createPrompt } from "../prompts";
+import { QUBRID_CODE_MODEL } from "../qubrid-client";
+import { DATABASE_PROMPT, createCompactPrompt, sliceArchitecture } from "../prompts";
 import { createMockDatabaseResponse } from "../mock-agents";
 
 /**
@@ -19,12 +20,15 @@ export async function databaseAgent(
       return createMockDatabaseResponse();
     }
 
-    // Create the full prompt with specification and architecture
-    const fullSpec = { specification: spec, architecture };
-    const prompt = createPrompt(DATABASE_PROMPT, fullSpec);
+    // Slim context: database agent only needs tables (credit-safe)
+    const archSlim = sliceArchitecture(architecture, "tables", "database");
+    const prompt = createCompactPrompt(DATABASE_PROMPT, {
+      specification: spec,
+      architecture: archSlim,
+    });
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Coder model for schema output (concise) + 32k cap (credit-tracked)
+    const parsedResponse = await callClaude(prompt, { temperature: 0.3, maxTokens: 32000, model: QUBRID_CODE_MODEL });
 
     // Validate response structure
     if (!parsedResponse.success) {

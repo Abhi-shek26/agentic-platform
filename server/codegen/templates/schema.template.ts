@@ -4,29 +4,47 @@
  */
 
 export const schemaTemplate = (schemaData: any): string => {
-  const { tables } = schemaData;
+  const tables = schemaData?.tables ?? [];
+  if (!Array.isArray(tables) || tables.length === 0) {
+    throw new Error('No tables data provided');
+  }
 
   const tableDefinitions = tables.map((table: any) => {
-    const { name, fields } = table;
+    const { name } = table;
+    const fields = table.fields ?? [];
     const fieldDefs = fields
       .map((field: any) => {
-        const { fieldName, type, constraints } = field;
-        let fieldDef = `  ${fieldName}: ${mapDrizzleType(type)}('${fieldName}')`;
+        // Support both shapes:
+        //  - template shape: { fieldName, type, constraints: { primaryKey, notNull, unique, defaultValue } }
+        //  - architect shape: { name, type, required, unique, foreignKey, values, default }
+        const fieldName = field.fieldName || field.name;
+        if (!fieldName) return null;
+        const constraints = field.constraints ?? {};
+        // Architect-shaped tables mark keys with required/unique only, so treat
+        // a field literally named "id" as the primary key by default.
+        const isPrimaryKey = constraints.primaryKey ?? (fieldName === 'id');
+        const isNotNull = constraints.notNull ?? field.required ?? isPrimaryKey;
+        const isUnique = constraints.unique ?? field.unique ?? false;
+        const defaultValue = constraints.defaultValue ?? field.default;
+        let fieldDef = `  ${fieldName}: ${mapDrizzleType(field.type)}('${fieldName}')`;
 
-        if (constraints) {
-          if (constraints.primaryKey) fieldDef += '.primaryKey()';
-          if (constraints.notNull) fieldDef += '.notNull()';
-          if (constraints.unique) fieldDef += '.unique()';
-          if (constraints.defaultValue) fieldDef += `.default(${constraints.defaultValue})`;
-          if (constraints.generated) fieldDef += '.generatedAlwaysAs()';
+        if (isPrimaryKey) fieldDef += '.primaryKey()';
+        if ((field.type === 'uuid') && isPrimaryKey) fieldDef += '.defaultRandom()';
+        if (isNotNull) fieldDef += '.notNull()';
+        if (isUnique) fieldDef += '.unique()';
+        if (defaultValue !== undefined && defaultValue !== null && defaultValue !== '') {
+          fieldDef += `.default(${formatDefault(defaultValue)})`;
         }
+        if (field.foreignKey) fieldDef += ` /* FK -> ${field.foreignKey} */`;
+        if (field.values) fieldDef += ` /* enum: ${field.values.join(' | ')} */`;
 
         fieldDef += ',';
         return fieldDef;
       })
+      .filter(Boolean)
       .join('\n');
 
-    return `export const ${name} = pgTable('${name}', {
+    return `export const ${sanitizeIdentifier(name)} = pgTable('${name}', {
 ${fieldDefs}
 });`;
   }).join('\n\n');
@@ -57,12 +75,25 @@ function mapDrizzleType(type: string): string {
     'text': 'text',
     'integer': 'integer',
     'number': 'decimal',
+    'float': 'decimal',
     'boolean': 'boolean',
     'date': 'date',
     'timestamp': 'timestamp',
+    'enum': 'text',
     'json': 'json',
   };
   return typeMap[type] || 'varchar';
+}
+
+function sanitizeIdentifier(name: string): string {
+  const cleaned = String(name || 'table').replace(/[^a-zA-Z0-9_]/g, '_');
+  return /^[A-Za-z_]/.test(cleaned) ? cleaned : `t_${cleaned}`;
+}
+
+function formatDefault(value: any): string {
+  if (value === 'now()') return 'new Date().toISOString()';
+  if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`;
+  return String(value);
 }
 
 /**

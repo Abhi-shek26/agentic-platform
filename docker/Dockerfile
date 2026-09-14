@@ -18,6 +18,7 @@ COPY shared ./shared
 COPY server ./server
 COPY client ./client
 COPY tailwind.config.ts ./
+COPY postcss.config.js ./
 COPY drizzle.config.ts ./
 
 # Build frontend

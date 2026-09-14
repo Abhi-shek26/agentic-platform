@@ -73,3 +73,31 @@ export async function downloadCode(projectId: string) {
   });
   return handleApiResponse(res);
 }
+
+export function getSiteUrl(projectId: string) {
+  return `${API_BASE}/sites/${projectId}`;
+}
+
+export async function getSiteInfo(projectId: string) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/site`, {
+    headers: getAuthHeaders(),
+  });
+  return handleApiResponse(res).then(r => r.json());
+}
+
+export async function deployToPlatform(projectId: string) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/deploy-platform`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return handleApiResponse(res).then(r => r.json());
+}
+
+export async function deployToVercel(projectId: string, vercelToken?: string) {
+  const res = await fetch(`${API_BASE}/api/projects/${projectId}/deploy-vercel`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(vercelToken ? { vercelToken } : {}),
+  });
+  return handleApiResponse(res).then(r => r.json());
+}

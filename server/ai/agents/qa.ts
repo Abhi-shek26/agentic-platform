@@ -1,6 +1,6 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { QA_PROMPT, createPrompt } from "../prompts";
+import { QA_PROMPT, createCompactPrompt, truncateLongStrings } from "../prompts";
 import { createMockQAResponse } from "../mock-agents";
 
 /**
@@ -18,11 +18,11 @@ export async function qaAgent(
       return createMockQAResponse();
     }
 
-    // Create the full prompt with all generated code
-    const prompt = createPrompt(QA_PROMPT, allGeneratedFiles);
+    // Summarized files only (full code would blow the token budget)
+    const prompt = createCompactPrompt(QA_PROMPT, truncateLongStrings(allGeneratedFiles));
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Call LLM API
+    const parsedResponse = await callClaude(prompt, { temperature: 0.2 });
 
     // Validate response structure
     if (!parsedResponse.success) {

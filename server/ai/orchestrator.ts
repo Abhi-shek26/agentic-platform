@@ -1,6 +1,6 @@
 import { specParserAgent } from "./agents/specParser";
 import { architectAgent } from "./agents/architect";
-import { frontendAgent } from "./agents/frontend";
+import { frontendAgent, isThinFrontend, FRONTEND_MIN_PAGES } from "./agents/frontend";
 import { backendAgent } from "./agents/backend";
 import { databaseAgent } from "./agents/database";
 import { integrationAgent } from "./agents/integration";
@@ -76,11 +76,29 @@ export async function orchestratorAgent(
       agents: agents,
     });
 
-    const [frontend, backend, database] = await Promise.all([
+    const [frontendFirst, backend, database] = await Promise.all([
       frontendAgent(parsedSpec.data.validatedSpec, architecture.data),
       backendAgent(parsedSpec.data.validatedSpec, architecture.data),
       databaseAgent(parsedSpec.data.validatedSpec, architecture.data),
     ]);
+
+    // One retry when the frontend comes back thin (single page + stubs).
+    // Costs one extra frontend call only in that case; mock agents always
+    // return 4 pages so this never fires in mock mode.
+    let frontend = frontendFirst;
+    if (frontend.success && isThinFrontend(frontend.data)) {
+      const got = frontend.data?.pages?.length ?? 0;
+      console.log(`[Orchestrator] Frontend thin (${got} < ${FRONTEND_MIN_PAGES} pages), retrying once...`);
+      onProgress({
+        currentAgent: "Frontend/Backend/Database",
+        percentage: 45,
+        message: `Frontend output was thin (${got} pages), regenerating with stricter instructions...`,
+        agents: agents,
+      });
+      frontend = await frontendAgent(parsedSpec.data.validatedSpec, architecture.data, {
+        retryHint: `Your previous output contained only ${got} page(s). This is insufficient. Emit at least ${FRONTEND_MIN_PAGES} complete pages AND every component those pages import, with full working code for each.`,
+      });
+    }
 
     agents[2].status = "completed";
     agents[3].status = "completed";

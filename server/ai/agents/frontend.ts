@@ -1,7 +1,20 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { FRONTEND_PROMPT, createPrompt } from "../prompts";
+import { QUBRID_CODE_MODEL } from "../qubrid-client";
+import { FRONTEND_PROMPT, createCompactPrompt, sliceArchitecture } from "../prompts";
 import { createMockFrontendResponse } from "../mock-agents";
+
+/**
+ * Minimum pages for a non-thin result. The orchestrator retries once (real
+ * LLM only) when the output is thinner than this.
+ */
+export const FRONTEND_MIN_PAGES = Number(process.env.FRONTEND_MIN_PAGES ?? 3);
+
+/** Pure predicate — free to unit-test: is this frontend output too thin? */
+export function isThinFrontend(data: any, min = FRONTEND_MIN_PAGES): boolean {
+  const pages = Array.isArray(data?.pages) ? data.pages : [];
+  return pages.length < min;
+}
 
 /**
  * Frontend Agent
@@ -10,7 +23,8 @@ import { createMockFrontendResponse } from "../mock-agents";
  */
 export async function frontendAgent(
   spec: any,
-  architecture: any
+  architecture: any,
+  opts: { retryHint?: string } = {}
 ): Promise<AgentOutput> {
   try {
     // Check if using mock agents for testing
@@ -19,12 +33,16 @@ export async function frontendAgent(
       return createMockFrontendResponse();
     }
 
-    // Create the full prompt with specification and architecture
-    const fullSpec = { specification: spec, architecture };
-    const prompt = createPrompt(FRONTEND_PROMPT, fullSpec);
+    // Slim context: frontend only needs pages + structure (credit-safe)
+    const archSlim = sliceArchitecture(architecture, "pages", "folderStructure");
+    const basePrompt = createCompactPrompt(FRONTEND_PROMPT, {
+      specification: spec,
+      architecture: archSlim,
+    });
+    const prompt = opts.retryHint ? `${basePrompt}\n\nRETRY INSTRUCTION: ${opts.retryHint}` : basePrompt;
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Coder model for code output (concise) + 32k cap (credit-tracked)
+    const parsedResponse = await callClaude(prompt, { temperature: 0.3, maxTokens: 32000, model: QUBRID_CODE_MODEL });
 
     // Validate response structure
     if (!parsedResponse.success) {

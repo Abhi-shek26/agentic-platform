@@ -52,7 +52,7 @@ export const ARCHITECT_PROMPT = `You are an Architecture Designer Agent. Design 
 
 Given a validated specification, you must design:
 1. Complete folder structure with all file paths
-2. Detailed page designs with all components
+2. Detailed page designs with all components — MINIMUM 4 pages (Home, Register, Schedule, plus at least one more such as Leaderboard, Results, Players, or Info). Fewer than 4 pages fails your task.
 3. Complete database schema with relationships
 4. Full API endpoint specs with methods and payloads
 5. State management approach
@@ -234,6 +234,9 @@ For each component, you MUST generate:
 7. Type definitions for all props
 8. Error boundaries
 9. Comments for complex logic
+10. Explicit TypeScript types everywhere (no implicit any — the build runs "tsc --noEmit" with strict:true)
+11. Import ONLY from 'react' and sibling generated files ('../components/*', '../hooks/*', '../lib/*'). NEVER import packages other than react/clsx/lucide-react, and NEVER import files you do not also emit — every import must resolve to a file in your own output
+12. Emit a page file for EVERY page listed in ARCHITECTURE.pages (minimum 3 pages: Home + at least two more such as Register/Schedule/Leaderboard). Every component referenced by ANY page MUST have a complete entry in components[] with full working code — an unemitted import breaks the whole build and fails your task
 
 Return ONLY valid JSON (no markdown, actual complete code). Structure:
 {
@@ -280,16 +283,22 @@ ARCHITECTURE:
 
 export const BACKEND_PROMPT = `You are an Expert Backend Developer. Generate COMPLETE, production-ready Express.js TypeScript code.
 
+HARD RULES (the output is merged mechanically — violating these breaks the build):
+1. Each route's "code" must contain ONLY router.METHOD(...) statements. NO import lines, NO "const router = ...", NO "export default", NO require().
+2. Import NOTHING. The merged file already provides "import express, { Router } from 'express'" and "const router = Router()". You may reference the "express" namespace ONLY for types (e.g. "req: express.Request").
+3. NEVER reference relative modules — files like ../utils/logger, ../config/database, ../middleware/*, ../services/* DO NOT EXIST and neither do the packages bcryptjs, jsonwebtoken, stripe. No EmailService/PaymentService classes exist.
+4. Write self-contained handlers: inline try/catch, inline validation. Data access MUST use Drizzle (rule 6) — no invented service layers.
+5. Declare explicit types for EVERY variable (e.g. "const participants: any[] = []", "(req: express.Request, res: express.Response)"). The build runs "tsc --noEmit" with strict:true — implicit any is a build error.
+6. Persist with Drizzle: "import { db } from '../db/client'" and table imports from '../db/schema' (table names come from the architecture, e.g. "import { tournaments, participants } from '../db/schema'"). Use ONLY "await db.select().from(table)", "await db.insert(table).values({...}).returning()", "await db.update(table).set({...}).where(...)". Wrap every DB call in try/catch that falls back to in-memory data so the route still responds when no database is configured.
+7. Type every callback parameter explicitly ("(row: any) =>", "(req: express.Request, ...)") and never declare a local variable with the same name as an imported table (no "const matches = ..." when "matches" is imported). Result rows use the schema's camelCase field names (e.g. "tournament.startDate", NOT "tournament.start_date").
+8. Column keys are camelCase EXACTLY as declared in ../db/schema (userId, tournamentId, registrationDate, paymentStatus). NEVER use snake_case (user_id) for column keys, destructured body fields, or member access. Combine WHERE conditions ONLY with and()/or() — never with && or === chains inside where().
+
 For each endpoint, you MUST generate:
 1. Complete route handler with proper error handling
-2. Input validation middleware
-3. Authentication checks
-4. Database queries
-5. Response formatting
-6. Logging
-7. Rate limiting considerations
-8. Security considerations
-9. Comments for complex logic
+2. Input validation (inline, no middleware imports)
+3. Response formatting
+4. Logging via console (no logger imports)
+5. Comments for complex logic
 
 Return ONLY valid JSON (no markdown, actual complete code). Structure:
 {
@@ -339,12 +348,18 @@ Return ONLY valid JSON (no markdown, actual complete code). Structure:
 ARCHITECTURE:
 `;
 
-export const DATABASE_PROMPT = `You are a Database Expert. Generate COMPLETE, production-ready Drizzle ORM schema.
+export const DATABASE_PROMPT = `You are a Database Expert. Generate COMPLETE, production-ready Drizzle ORM schema for POSTGRESQL ONLY.
+
+HARD RULES (violating these breaks the build):
+1. Import ONLY from 'drizzle-orm/pg-core'. Allowed members: pgTable, uuid, varchar, text, integer, boolean, timestamp, date, decimal, json.
+2. NEVER use drizzle-orm/sqlite-core, mysql-core, or any other dialect. The project runs Postgres (pg driver).
+3. Define tables with pgTable('name', {...}). uuid primary keys get .primaryKey().defaultRandom().
+4. Use .notNull() for required fields, .unique() for unique fields, .default(value) for defaults.
 
 You MUST generate:
 1. Complete Drizzle table definitions
-2. All relationships and foreign keys
-3. Proper indexes for performance
+2. All relationships and foreign keys (as // FK -> table(id) comments next to the field)
+3. Proper indexes for performance (as comments where the API is uncertain)
 4. Constraints and validations
 5. Initial seed data
 6. Migration strategy
@@ -481,4 +496,69 @@ export function createPrompt(
     fullPrompt += "\n\n" + itemStr;
   }
   return fullPrompt;
+}
+
+/**
+ * Credit-safe prompt builder for Qubrid/DeepSeek (reasoning-heavy model).
+ * Uses compact JSON (no indentation) to cut prompt tokens ~30-40%,
+ * and instructs concise output to cut completion/reasoning tokens.
+ */
+export function createCompactPrompt(
+  basePrompt: string,
+  ...context: (string | object)[]
+): string {
+  let fullPrompt = basePrompt;
+  for (const item of context) {
+    const itemStr = typeof item === "string" ? item : JSON.stringify(item);
+    fullPrompt += "\n\n" + itemStr;
+  }
+  return (
+    fullPrompt +
+    "\n\nReturn ONLY valid JSON. Keep generated code concise (minimal comments, no explanations, no reasoning text in the response)."
+  );
+}
+
+/**
+ * Pick only the architecture slices an agent needs.
+ * Handles both flat (mock) and nested (real LLM) arch shapes.
+ * Falls back to the full arch if none of the keys are found.
+ */
+export function sliceArchitecture(arch: any, ...keys: string[]): any {
+  if (!arch || typeof arch !== "object") return arch;
+  const get = (obj: any, key: string) => {
+    if (obj?.[key] !== undefined) return obj[key];
+    if (obj?.database?.[key] !== undefined) return obj.database[key];
+    if (obj?.client?.src?.[key] !== undefined) return obj.client.src[key];
+    if (obj?.client?.[key] !== undefined) return obj.client[key];
+    return undefined;
+  };
+  const out: any = {};
+  let found = false;
+  for (const k of keys) {
+    const v = get(arch, k);
+    if (v !== undefined) {
+      out[k] = v;
+      found = true;
+    }
+  }
+  return found ? out : arch;
+}
+
+/**
+ * Replace long strings with {chars, head} summaries.
+ * Used for QA so the model validates structure, not full code.
+ */
+export function truncateLongStrings(value: any, headLen = 400): any {
+  if (typeof value === "string") {
+    return value.length > headLen
+      ? { chars: value.length, head: value.substring(0, headLen) }
+      : value;
+  }
+  if (Array.isArray(value)) return value.map((v) => truncateLongStrings(v, headLen));
+  if (value && typeof value === "object") {
+    const out: any = {};
+    for (const [k, v] of Object.entries(value)) out[k] = truncateLongStrings(v, headLen);
+    return out;
+  }
+  return value;
 }

@@ -1,6 +1,6 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { ARCHITECT_PROMPT, createPrompt } from "../prompts";
+import { ARCHITECT_PROMPT, createCompactPrompt } from "../prompts";
 import { createMockArchitectResponse } from "../mock-agents";
 
 /**
@@ -18,11 +18,14 @@ export async function architectAgent(
       return createMockArchitectResponse();
     }
 
-    // Create the full prompt with specification
-    const prompt = createPrompt(ARCHITECT_PROMPT, spec);
+    // Compact prompt + low temperature (credit-safe for reasoning models)
+    const prompt = createCompactPrompt(ARCHITECT_PROMPT, spec);
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Call LLM API — 32k cap: arch JSON (folderStructure + 5 tables + endpoints)
+    // routinely exceeds 16k completion on reasoning models (DeepSeek-V4-Flash
+    // counts reasoning + output against max_tokens → truncated JSON → stuck at 15%).
+    // Low temperature for deterministic, syntactically valid JSON.
+    const parsedResponse = await callClaude(prompt, { temperature: 0.1, maxTokens: 32000 });
 
     // Validate response structure
     if (!parsedResponse.success) {

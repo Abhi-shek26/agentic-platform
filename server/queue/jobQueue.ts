@@ -38,7 +38,11 @@ function createRedisConfig() {
 export const generateQueue = new Bull("generation", {
   redis: createRedisConfig(),
   defaultJobOptions: {
-    attempts: 2,
+    // Single attempt: each attempt re-runs the whole LLM orchestration
+    // (SpecParser → Architect → …), so a retry doubles paid token spend on
+    // failures that are deterministic (bad JSON, truncation). Transient
+    // network errors surface immediately instead of silently double-billing.
+    attempts: 1,
     backoff: {
       type: "exponential",
       delay: 2000,
@@ -133,6 +137,9 @@ generateQueue.process(async (job) => {
       },
     });
 
+    // Count quota usage (organizationId doubles as the owner user id).
+    await chargeGeneration(projectId);
+
     console.log(`[Job ${job.id}] Generation and assembly completed successfully`);
     return {
       success: true,
@@ -161,9 +168,32 @@ generateQueue.process(async (job) => {
       },
     });
 
+    // Failed runs still consumed LLM tokens — count them too.
+    await chargeGeneration(projectId);
+
     throw error;
   }
 });
+
+/**
+ * Increment the owner's generationUsed counter. The quota check on the
+ * generate route compares used >= quota, but nothing ever incremented it,
+ * leaving spend unlimited. Best-effort: quota must never break generation.
+ */
+async function chargeGeneration(projectId: string): Promise<void> {
+  try {
+    const project = await storage.getProject(projectId);
+    const ownerId = (project as any)?.organizationId;
+    if (!ownerId) return;
+    const user = await storage.getUser(ownerId);
+    if (!user) return;
+    const used = (user.generationUsed ?? 0) + 1;
+    await storage.updateUser(ownerId, { generationUsed: used } as any);
+    console.log(`[Job] Quota charged - User ${ownerId}: used=${used}/${user.generationQuota ?? 5}`);
+  } catch (err) {
+    console.error("[Job] Quota charge failed (non-fatal):", err instanceof Error ? err.message : err);
+  }
+}
 
 /**
  * Job event handlers

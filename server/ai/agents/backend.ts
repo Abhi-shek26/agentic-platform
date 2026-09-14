@@ -1,6 +1,7 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { BACKEND_PROMPT, createPrompt } from "../prompts";
+import { QUBRID_CODE_MODEL } from "../qubrid-client";
+import { BACKEND_PROMPT, createCompactPrompt, sliceArchitecture } from "../prompts";
 import { createMockBackendResponse } from "../mock-agents";
 
 /**
@@ -19,12 +20,15 @@ export async function backendAgent(
       return createMockBackendResponse();
     }
 
-    // Create the full prompt with specification and architecture
-    const fullSpec = { specification: spec, architecture };
-    const prompt = createPrompt(BACKEND_PROMPT, fullSpec);
+    // Slim context: backend only needs endpoints + tables (credit-safe)
+    const archSlim = sliceArchitecture(architecture, "apiEndpoints", "tables");
+    const prompt = createCompactPrompt(BACKEND_PROMPT, {
+      specification: spec,
+      architecture: archSlim,
+    });
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Coder model for code output (concise) + 32k cap (credit-tracked)
+    const parsedResponse = await callClaude(prompt, { temperature: 0.3, maxTokens: 32000, model: QUBRID_CODE_MODEL });
 
     // Validate response structure
     if (!parsedResponse.success) {

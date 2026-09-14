@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getGenerationStatus, downloadCode } from '../lib/api';
+import { getGenerationStatus, downloadCode, getSiteUrl, deployToPlatform, deployToVercel } from '../lib/api';
 
 interface Agent {
   name: string;
@@ -24,6 +24,9 @@ export default function GenerationProgress() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [siteUrl, setSiteUrl] = useState<string | null>(null);
+  const [deployMsg, setDeployMsg] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -198,7 +201,7 @@ export default function GenerationProgress() {
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <h3 className="font-bold text-green-800 mb-2">✓ Generation Complete!</h3>
             <p className="text-green-700 mb-4">Your tournament website has been generated successfully.</p>
-            <div className="flex space-x-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => navigate('/')}
                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
@@ -213,7 +216,77 @@ export default function GenerationProgress() {
                   Download Code
                 </button>
               )}
+              <button
+                onClick={async () => {
+                  setDeploying(true);
+                  setDeployMsg(null);
+                  try {
+                    const r = await deployToPlatform(projectId!);
+                    if (r.siteUrl) {
+                      setSiteUrl(getSiteUrl(projectId!));
+                      setDeployMsg('🎉 Site is live on platform hosting!');
+                    } else {
+                      setDeployMsg(`Deploy failed: ${r.error || 'unknown error'}`);
+                    }
+                  } catch (err) {
+                    setDeployMsg(`Deploy error: ${err}`);
+                  } finally {
+                    setDeploying(false);
+                  }
+                }}
+                disabled={deploying}
+                className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
+              >
+                {deploying ? 'Publishing...' : 'Publish Live Site'}
+              </button>
+              <button
+                onClick={async () => {
+                  const token = window.prompt('Enter Vercel token (or set VERCEL_TOKEN on server, leave blank to use server token):', '');
+                  if (token === null) return;
+                  setDeploying(true);
+                  setDeployMsg(null);
+                  try {
+                    const r = await deployToVercel(projectId!, token || undefined);
+                    if (r.url) {
+                      setDeployMsg(`🚀 Live on Vercel: ${r.url}`);
+                    } else {
+                      setDeployMsg(`Vercel deploy failed: ${r.error || 'unknown error'}`);
+                    }
+                  } catch (err) {
+                    setDeployMsg(`Vercel error: ${err}`);
+                  } finally {
+                    setDeploying(false);
+                  }
+                }}
+                disabled={deploying}
+                className="bg-black text-white px-4 py-2 rounded hover:bg-gray-800 disabled:opacity-50"
+              >
+                Deploy to Vercel
+              </button>
             </div>
+            {deployMsg && (
+              <p className="mt-3 text-sm font-medium text-gray-800">{deployMsg}</p>
+            )}
+            {(siteUrl || projectId) && (
+              <div className="mt-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-sm font-semibold text-gray-700">Live preview:</span>
+                  <a
+                    href={siteUrl || getSiteUrl(projectId!)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-blue-600 underline"
+                  >
+                    Open in new tab ↗
+                  </a>
+                </div>
+                <iframe
+                  title="Site preview"
+                  src={siteUrl || getSiteUrl(projectId!)}
+                  className="w-full h-96 bg-white rounded border"
+                />
+              </div>
+            )}
           </div>
         )}
 

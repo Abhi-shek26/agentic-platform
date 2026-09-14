@@ -1,0 +1,9 @@
+node_modules/
+client/dist/
+client/node_modules/
+.git/
+generated-projects/
+.tmp-downloads/
+*.log
+.env
+.env.*.local

@@ -44,7 +44,7 @@ export interface AuthenticatedSession {
 // JWT-LIKE TOKEN MANAGEMENT (for API auth)
 // ============================================================
 
-import { createHash, randomBytes } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 
 export function generateAuthToken(): string {
   return randomBytes(32).toString("hex");
@@ -52,6 +52,49 @@ export function generateAuthToken(): string {
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+// ============================================================
+// STATELESS SESSION TOKENS (survive container restarts)
+// ============================================================
+// Replaces the old in-memory token→user Map: every restart wiped all
+// sessions (401s) along with all users. Format:
+//   base64url("<userId>.<expUnix>") + "." + base64url(HMAC_SHA256(payload))
+
+const b64urlEncode = (buf: Buffer): string =>
+  buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+const b64urlDecode = (s: string): string =>
+  Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+
+function sessionSecret(): string {
+  return process.env.SESSION_SECRET || "dev-secret-key";
+}
+
+export function signSessionToken(userId: string, maxAgeSeconds = 7 * 24 * 3600): string {
+  const exp = Math.floor(Date.now() / 1000) + maxAgeSeconds;
+  const payload = `${userId}.${exp}`;
+  const sig = createHmac("sha256", sessionSecret()).update(payload).digest();
+  return `${b64urlEncode(Buffer.from(payload, "utf8"))}.${b64urlEncode(sig)}`;
+}
+
+export function verifySessionToken(token: string): { userId: string } | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+    const payload = b64urlDecode(parts[0]);
+    const dot = payload.lastIndexOf(".");
+    if (dot < 0) return null;
+    const userId = payload.slice(0, dot);
+    const exp = Number(payload.slice(dot + 1));
+    if (!userId || !Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return null;
+    const expected = createHmac("sha256", sessionSecret()).update(payload).digest();
+    const actual = Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+    return { userId };
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================

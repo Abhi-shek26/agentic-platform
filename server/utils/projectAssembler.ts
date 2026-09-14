@@ -6,6 +6,8 @@
 import * as path from 'path';
 import { CodeGenerator } from '../codegen/generators/codeGenerator';
 import { FileAssembler } from '../codegen/generators/fileAssembler';
+import { buildPreviewHtml } from './sitePreview';
+import { refreshFailureMarker } from './siteBuilder';
 
 export interface AssemblerResult {
   success: boolean;
@@ -108,8 +110,24 @@ export class ProjectAssembler {
         specification: generationData.specification,
       });
 
+      // Create instant static preview (served at /sites/:projectId, zero build)
+      try {
+        const previewHtml = buildPreviewHtml(projectName, generationData.specification);
+        const previewResult = FileAssembler.writeFiles(projectPath, [
+          { path: 'preview/index.html', content: previewHtml, type: 'plaintext' },
+        ]);
+        if (!previewResult.success) warnings.push(...previewResult.errors);
+        else console.log('✓ Created preview/index.html');
+      } catch (error) {
+        warnings.push(`Preview generation failed: ${error instanceof Error ? error.message : error}`);
+      }
+
       // Get project statistics
       const stats = FileAssembler.getProjectStats(codeGenResult.files);
+
+      // Fresh sources invalidate any previously built preview bundle (the
+      // honest-preview builder will rebuild on next /sites/:id request).
+      refreshFailureMarker(projectId);
 
       console.log('\n✅ Project assembly complete!');
       console.log(`   Files: ${stats.totalFiles}`);

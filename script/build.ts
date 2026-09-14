@@ -26,7 +26,7 @@ try {
 
   console.log("\n✅ Build successful!\n");
   console.log("📦 Output:");
-  console.log("   - Frontend: dist/public/");
+  console.log("   - Frontend: dist/");
   console.log("   - Backend:  dist/index.cjs");
 
   process.exit(0);

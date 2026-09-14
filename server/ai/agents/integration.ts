@@ -1,6 +1,6 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { INTEGRATION_PROMPT, createPrompt } from "../prompts";
+import { INTEGRATION_PROMPT, createCompactPrompt } from "../prompts";
 import { createMockIntegrationResponse } from "../mock-agents";
 
 /**
@@ -18,11 +18,11 @@ export async function integrationAgent(
       return createMockIntegrationResponse();
     }
 
-    // Create the full prompt with specification
-    const prompt = createPrompt(INTEGRATION_PROMPT, spec);
+    // Compact prompt + low temperature (credit-safe for reasoning models)
+    const prompt = createCompactPrompt(INTEGRATION_PROMPT, spec);
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Call LLM API
+    const parsedResponse = await callClaude(prompt, { temperature: 0.3 });
 
     // Validate response structure
     if (!parsedResponse.success) {

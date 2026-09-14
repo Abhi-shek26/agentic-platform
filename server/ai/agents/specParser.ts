@@ -1,6 +1,6 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { SPEC_PARSER_PROMPT, createPrompt } from "../prompts";
+import { SPEC_PARSER_PROMPT, createCompactPrompt } from "../prompts";
 import { createMockSpecParserResponse } from "../mock-agents";
 
 /**
@@ -19,11 +19,11 @@ export async function specParserAgent(
       return createMockSpecParserResponse();
     }
 
-    // Create the full prompt with user specification
-    const prompt = createPrompt(SPEC_PARSER_PROMPT, specification);
+    // Compact prompt + low temperature (credit-safe for reasoning models)
+    const prompt = createCompactPrompt(SPEC_PARSER_PROMPT, specification);
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Call LLM API
+    const parsedResponse = await callClaude(prompt, { temperature: 0.3 });
 
     // Validate response structure
     if (!parsedResponse.success) {

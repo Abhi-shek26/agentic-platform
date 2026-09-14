@@ -1,6 +1,7 @@
 import { AgentOutput } from "@shared/types";
 import { callClaude } from "../client";
-import { CONFIG_PROMPT, createPrompt } from "../prompts";
+import { QUBRID_CODE_MODEL } from "../qubrid-client";
+import { CONFIG_PROMPT, createCompactPrompt } from "../prompts";
 import { createMockConfigResponse } from "../mock-agents";
 
 /**
@@ -18,11 +19,11 @@ export async function configAgent(
       return createMockConfigResponse();
     }
 
-    // Create the full prompt with specification
-    const prompt = createPrompt(CONFIG_PROMPT, spec);
+    // Compact prompt + low temperature (credit-safe for reasoning models)
+    const prompt = createCompactPrompt(CONFIG_PROMPT, spec);
 
-    // Call Claude API
-    const parsedResponse = await callClaude(prompt);
+    // Call LLM API (coder model: config files are code output)
+    const parsedResponse = await callClaude(prompt, { temperature: 0.3, maxTokens: 32000, model: QUBRID_CODE_MODEL });
 
     // Validate response structure
     if (!parsedResponse.success) {

@@ -1,4 +1,7 @@
 import { User, InsertUser, Project, InsertProject } from "@shared/schema";
+import { users, organizations, projects, generationJobs } from "@shared/schema";
+import { getDb } from "./db";
+import { eq } from "drizzle-orm";
 
 /**
  * Storage interface for database operations
@@ -185,5 +188,132 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Default export with in-memory storage for development
-export const storage = new MemStorage();
+/** Normalize emails at the storage boundary so signup/login can't mismatch on case/whitespace. */
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/**
+ * PostgreSQL storage via Drizzle. Survives container restarts — the reason
+ * logins kept failing with "Invalid credentials" on MemStorage.
+ */
+export class PgStorage implements IStorage {
+  private get db() {
+    return getDb();
+  }
+
+  async getUser(id: string): Promise<User | undefined> {
+    const rows = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const rows = await this.db.select().from(users).where(eq(users.username, username)).limit(1);
+    return rows[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const rows = await this.db.select().from(users).where(eq(users.email, normalizeEmail(email))).limit(1);
+    return rows[0];
+  }
+
+  async createUser(userInput: InsertUser): Promise<User> {
+    const rows = await this.db
+      .insert(users)
+      .values({ ...userInput, email: normalizeEmail(userInput.email) })
+      .returning();
+    return rows[0];
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const rows = await this.db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(users.id, id))
+      .returning();
+    if (!rows[0]) throw new Error("User not found");
+    return rows[0];
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await this.db.delete(users).where(eq(users.id, id));
+  }
+
+  async getProject(id: string): Promise<Project | undefined> {
+    const rows = await this.db.select().from(projects).where(eq(projects.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async listProjects(organizationId: string): Promise<Project[]> {
+    return this.db.select().from(projects).where(eq(projects.organizationId, organizationId));
+  }
+
+  async createProject(projectInput: InsertProject): Promise<Project> {
+    const rows = await this.db.insert(projects).values(projectInput).returning();
+    return rows[0];
+  }
+
+  async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
+    const rows = await this.db
+      .update(projects)
+      .set({ ...updates, updatedAt: new Date() } as any)
+      .where(eq(projects.id, id))
+      .returning();
+    if (!rows[0]) throw new Error("Project not found");
+    return rows[0];
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.db.delete(projects).where(eq(projects.id, id));
+  }
+
+  async getOrganization(id: string): Promise<any> {
+    const rows = await this.db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async listUserOrganizations(userId: string): Promise<any[]> {
+    return this.db.select().from(organizations).where(eq(organizations.ownerId, userId));
+  }
+
+  async createOrganization(org: any): Promise<any> {
+    const rows = await this.db.insert(organizations).values(org).returning();
+    return rows[0];
+  }
+
+  async getGenerationJob(jobId: string): Promise<any> {
+    const rows = await this.db.select().from(generationJobs).where(eq(generationJobs.id, jobId)).limit(1);
+    return rows[0];
+  }
+
+  async createGenerationJob(job: any): Promise<any> {
+    const rows = await this.db
+      .insert(generationJobs)
+      .values({
+        projectId: job.projectId,
+        status: job.status ?? "queued",
+        currentAgent: job.currentAgent,
+        progressPercentage: job.progressPercentage ?? 0,
+        errorMessage: job.errorMessage,
+        logs: job.logs ?? [],
+        startedAt: job.startedAt ? new Date(job.startedAt) : new Date(),
+      })
+      .returning();
+    return rows[0];
+  }
+
+  async updateGenerationJob(jobId: string, updates: any): Promise<any> {
+    const rows = await this.db
+      .update(generationJobs)
+      .set(updates)
+      .where(eq(generationJobs.id, jobId))
+      .returning();
+    if (!rows[0]) throw new Error("Generation job not found");
+    return rows[0];
+  }
+}
+
+// Default export: PostgreSQL when DATABASE_URL is set, in-memory otherwise.
+// In docker-compose DATABASE_URL always points at the postgres service.
+export const storage: IStorage = process.env.DATABASE_URL ? new PgStorage() : new MemStorage();
+console.log(`[Storage] Using ${process.env.DATABASE_URL ? "PostgreSQL (persistent)" : "in-memory (ephemeral)"} backend`);

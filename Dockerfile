@@ -18,7 +18,11 @@ COPY server ./server
 COPY client ./client
 COPY vite.config.ts ./
 COPY tailwind.config.ts ./
+COPY postcss.config.js ./
 COPY drizzle.config.ts ./
+
+# Build the frontend assets served by Express
+RUN npm run build:client
 
 # Expose port
 EXPOSE 5000
