@@ -72,8 +72,9 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Request logging
+// Request logging — skip Render's /health probes so logs stay readable.
 app.use((req, res, next) => {
+  if (req.path === "/health") return next();
   const start = Date.now();
   res.on("finish", () => {
     const duration = Date.now() - start;
