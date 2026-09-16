@@ -18,7 +18,16 @@ export function getPool(): Pool {
   if (!pool) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error("DATABASE_URL is not set");
-    pool = new Pool({ connectionString, max: 10 });
+    // Neon/Supabase free tiers require SSL. pg respects ?sslmode=require in the URL,
+    // but pooled Neon URLs sometimes omit it — force ssl when host matches.
+    const needsSsl =
+      /sslmode=require/i.test(connectionString) ||
+      /neon\.tech|supabase\.co|render\.com/i.test(connectionString);
+    pool = new Pool({
+      connectionString,
+      max: 10,
+      ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
     pool.on("error", (err) => console.error("[DB] Pool error:", err));
   }
   return pool;

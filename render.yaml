@@ -1,0 +1,36 @@
+# Render Blueprint — backend only (frontend lives on Vercel).
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: agentic-backend
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build:client
+    startCommand: npx tsx server/index.ts
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: MOCK_AGENTS
+        value: true
+      - key: QUBRID_API_KEY
+        sync: false
+      - key: QUBRID_BASE_URL
+        value: https://platform.qubrid.com/v1
+      - key: QUBRID_MODEL
+        value: deepseek-ai/DeepSeek-V4-Flash
+      - key: VERCEL_TOKEN
+        sync: false

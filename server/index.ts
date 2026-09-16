@@ -23,16 +23,23 @@ const __dirname = dirname(__filename);
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
+// Render/Vercel sit behind proxies — needed for secure cookies + correct IPs.
+app.set("trust proxy", 1);
 
 // ============================================================
 // MIDDLEWARE
 // ============================================================
 
-// CORS
+// CORS — split deploy: Vercel frontend -> Render backend (Bearer tokens).
+// FRONTEND_URL=https://<vercel-app>.vercel.app in prod, else * for local dev.
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
+  const frontendUrl = (process.env.FRONTEND_URL || "").trim();
+  res.header("Access-Control-Allow-Origin", frontendUrl || "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (frontendUrl) {
+    res.header("Access-Control-Allow-Credentials", "true");
+  }
   if (req.method === "OPTIONS") {
     res.sendStatus(200);
   } else {
@@ -44,15 +51,18 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
-// Session management
+// Session management — split deploy uses cross-site cookies (Vercel -> Render),
+// so prod needs sameSite:none + secure. Single Render instance, MemoryStore is fine.
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "dev-secret-key",
     resave: false,
     saveUninitialized: false,
+    proxy: process.env.NODE_ENV === "production",
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
+      sameSite: process.env.FRONTEND_URL ? "none" : "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     },
   })

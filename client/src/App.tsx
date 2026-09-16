@@ -9,13 +9,14 @@ import "./App.css";
 function App() {
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
     // Check if user is already logged in
     const token = localStorage.getItem('authToken');
     if (token) {
       // Verify token is valid by making a test request
-      fetch('http://localhost:5000/api/auth/me', {
+      fetch(`${API_BASE}/api/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

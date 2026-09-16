@@ -15,6 +15,7 @@ function createRedisConfig() {
 
   if (redisUrl) {
     const parsedUrl = new URL(redisUrl);
+    const isTls = parsedUrl.protocol === "rediss:";
 
     return {
       host: parsedUrl.hostname,
@@ -24,6 +25,8 @@ function createRedisConfig() {
       db: parsedUrl.pathname ? Number(parsedUrl.pathname.replace("/", "")) || 0 : 0,
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
+      // Upstash free tier uses rediss:// (TLS). Bull/ioredis needs tls object or it fails handshake.
+      ...(isTls ? { tls: {} } : {}),
     };
   }
 
