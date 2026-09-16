@@ -33,7 +33,7 @@ app.set("trust proxy", 1);
 // CORS — split deploy: Vercel frontend -> Render backend (Bearer tokens).
 // FRONTEND_URL=https://<vercel-app>.vercel.app in prod, else * for local dev.
 app.use((req, res, next) => {
-  const frontendUrl = (process.env.FRONTEND_URL || "").trim();
+  const frontendUrl = (process.env.FRONTEND_URL || "").trim().replace(/\/+$/, "");
   res.header("Access-Control-Allow-Origin", frontendUrl || "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
